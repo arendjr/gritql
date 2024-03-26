@@ -7,7 +7,7 @@ use super::{
     variable::{get_variables, Variable, VariableSourceLocations},
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -95,9 +95,9 @@ impl PredicateDefinition {
         Ok(())
     }
 
-    pub fn call<'a>(
+    pub fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         args: &'a [Option<Pattern>],
         logs: &mut AnalysisLogs,

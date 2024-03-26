@@ -5,7 +5,7 @@ use super::{
     variable::VariableSourceLocations,
     Node, State,
 };
-use crate::{context::Context, resolve};
+use crate::{binding::Binding, context::Context, resolve};
 
 use anyhow::{anyhow, Result};
 use core::fmt::Debug;
@@ -70,8 +70,8 @@ impl Name for Contains {
     }
 }
 
-fn execute_until<'a>(
-    init_state: &mut State<'a>,
+fn execute_until<'a, B: Binding>(
+    init_state: &mut State<'a, B>,
     node: &Node<'a>,
     src: &'a str,
     context: &'a impl Context,
@@ -126,10 +126,10 @@ fn execute_until<'a>(
 // Contains and within should call the same function taking an iterator as an argument
 // even better two arguments an accumulator and an iterator.
 impl Matcher for Contains {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        resolved_pattern: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        resolved_pattern: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

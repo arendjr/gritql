@@ -34,17 +34,18 @@ use super::{
     r#where::Where, rewrite::Rewrite, some::Some, string_constant::StringConstant,
     variable::Variable, within::Within, Node, State,
 };
-use marzano_util::node_with_source::NodeWithSource;
+use crate::binding::Binding;
 use crate::context::Context;
 use crate::pattern::register_variable;
 use crate::pattern::string_constant::AstLeafNode;
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
-use grit_util::{traverse, Order, AstNode};
+use grit_util::{traverse, AstNode, Order};
 use marzano_language::language::{Field, GritMetaValue};
 use marzano_language::{language::Language, language::SnippetNode};
 use marzano_util::analysis_logs::AnalysisLogs;
 use marzano_util::cursor_wrapper::CursorWrapper;
+use marzano_util::node_with_source::NodeWithSource;
 use marzano_util::position::{char_index_to_byte_index, Position, Range};
 use regex::Match;
 use std::collections::{BTreeMap, HashMap};
@@ -55,10 +56,10 @@ pub(crate) trait Matcher: Debug {
     // it is important that any implementors of Pattern
     // do not compute-expensive things in execute
     // it should be stored somewhere in the struct of the implementor
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool>;
@@ -543,15 +544,22 @@ impl Pattern {
 
                     // TODO check if Pattern is Dots, and error at compile time,
                     // dots only makes sense in a list.
-                    if !field.multiple() {    
+                    if !field.multiple() {
                         if nodes_list.len() == 1 {
                             return Ok((field_id, false, nodes_list.pop().unwrap()));
                         }
                         let field_node = node.child_by_field_id(field_id).unwrap();
-                        let field_node_with_source = NodeWithSource::new(field_node.clone(), str::from_utf8(text).unwrap());
-                        return Ok((field_id, false,  Pattern::AstLeafNode(AstLeafNode::new(
-                            field_node.kind_id(), field_node_with_source.text(), lang,
-                        )?)));
+                        let field_node_with_source =
+                            NodeWithSource::new(field_node.clone(), str::from_utf8(text).unwrap());
+                        return Ok((
+                            field_id,
+                            false,
+                            Pattern::AstLeafNode(AstLeafNode::new(
+                                field_node.kind_id(),
+                                field_node_with_source.text(),
+                                lang,
+                            )?),
+                        ));
                     }
                     if nodes_list.len() == 1
                         && matches!(
@@ -611,9 +619,9 @@ impl Pattern {
     }
 
     // todo this should return a cow, but currently can't figure out lifetimes
-    pub fn text<'a>(
+    pub fn text<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<String> {
@@ -622,9 +630,9 @@ impl Pattern {
             .to_string())
     }
 
-    pub(crate) fn float<'a>(
+    pub(crate) fn float<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<f64> {
@@ -1076,10 +1084,10 @@ impl Name for Pattern {
 }
 
 impl Matcher for Pattern {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

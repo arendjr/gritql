@@ -6,7 +6,7 @@ use super::{
     state::State,
     variable::VariableSourceLocations,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_language::language::Field;
@@ -112,10 +112,10 @@ impl Name for List {
 }
 
 impl Matcher for List {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut super::state::State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut super::state::State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -146,10 +146,10 @@ impl Matcher for List {
     }
 }
 
-fn execute_assoc<'a>(
+fn execute_assoc<'a, B: Binding>(
     patterns: &'a [Pattern],
-    children: &[Cow<ResolvedPattern<'a>>],
-    current_state: &mut State<'a>,
+    children: &[Cow<ResolvedPattern<'a, B>>],
+    current_state: &mut State<'a, B>,
     context: &'a impl Context,
     logs: &mut AnalysisLogs,
 ) -> Result<bool> {

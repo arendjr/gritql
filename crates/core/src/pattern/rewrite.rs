@@ -9,7 +9,7 @@ use super::{
     variable_content::VariableContent,
     Effect, EffectKind, State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::{AnalysisLogBuilder, AnalysisLogs};
@@ -176,10 +176,10 @@ impl Rewrite {
      *
      * If called from a rewrite pattern, the binding should be Some(the current node).
      */
-    pub(crate) fn execute_generalized<'a>(
+    pub(crate) fn execute_generalized<'a, B: Binding>(
         &'a self,
-        resolved: Option<&ResolvedPattern<'a>>,
-        state: &mut State<'a>,
+        resolved: Option<&ResolvedPattern<'a, B>>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -234,7 +234,7 @@ impl Rewrite {
                 bail!("variable on left hand side of rewrite side-conditions cannot be bound to snippets")
             }
         };
-        let replacement: ResolvedPattern<'_> =
+        let replacement: ResolvedPattern<'_, B> =
             ResolvedPattern::from_dynamic_pattern(&self.right, state, context, logs)?;
         let effects = bindings.iter().map(|b| Effect {
             binding: b.clone(),
@@ -253,10 +253,10 @@ impl Name for Rewrite {
 }
 
 impl Matcher for Rewrite {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -265,12 +265,12 @@ impl Matcher for Rewrite {
 }
 
 impl Evaluator for Rewrite {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let predicator = self.execute_generalized(None, state, context, logs)?;
         Ok(FuncEvaluation {
             predicator,

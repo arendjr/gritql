@@ -6,6 +6,7 @@ use super::{
     variable::VariableSourceLocations,
     Node, State,
 };
+use crate::binding::Binding;
 use crate::context::Context;
 use anyhow::{anyhow, Result};
 use core::fmt::Debug;
@@ -74,10 +75,10 @@ impl Name for Like {
 
 impl Matcher for Like {
     #[cfg(feature = "embeddings")]
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -92,10 +93,10 @@ impl Matcher for Like {
     }
 
     #[cfg(not(feature = "embeddings"))]
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        _binding: &ResolvedPattern<'a>,
-        _state: &mut State<'a>,
+        _binding: &ResolvedPattern<'a, B>,
+        _state: &mut State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> Result<bool> {

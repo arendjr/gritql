@@ -4,7 +4,7 @@ use super::{
     resolved_pattern::ResolvedPattern,
     variable::VariableSourceLocations,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -71,10 +71,10 @@ impl Name for GritMap {
 }
 
 impl Matcher for GritMap {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut super::state::State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut super::state::State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

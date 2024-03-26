@@ -7,7 +7,7 @@ use marzano_util::{
     position::{Position, Range},
 };
 
-use crate::{context::Context, split_snippet::split_snippet};
+use crate::{binding::Binding, context::Context, split_snippet::split_snippet};
 
 use super::{
     accessor::Accessor,
@@ -49,9 +49,9 @@ pub enum DynamicPattern {
 }
 
 impl DynamicPattern {
-    pub fn text<'a>(
+    pub fn text<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<String> {
@@ -67,10 +67,10 @@ impl Name for DynamicPattern {
 }
 
 impl Matcher for DynamicPattern {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

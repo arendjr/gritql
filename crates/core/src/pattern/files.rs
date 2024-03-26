@@ -3,7 +3,7 @@ use super::{
     resolved_pattern::ResolvedPattern,
     state::State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::Result;
 use im::vector;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -20,10 +20,10 @@ impl Files {
 }
 
 impl Matcher for Files {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        resolved_pattern: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        resolved_pattern: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

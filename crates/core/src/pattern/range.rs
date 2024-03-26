@@ -3,7 +3,7 @@ use super::{
     resolved_pattern::ResolvedPattern,
     state,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use marzano_util::position::UtilRange;
@@ -85,10 +85,10 @@ impl From<UtilRange> for Range {
 }
 
 impl Matcher for Range {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        _state: &mut state::State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        _state: &mut state::State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> anyhow::Result<bool> {

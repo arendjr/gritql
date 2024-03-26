@@ -1,17 +1,22 @@
-use crate::pattern::{
-    built_in_functions::CallBuiltIn,
-    function_definition::{ForeignFunctionDefinition, GritFunctionDefinition},
-    pattern_definition::PatternDefinition,
-    predicate_definition::PredicateDefinition,
-    resolved_pattern::ResolvedPattern,
-    state::State,
-    FileOwners,
+use crate::{
+    binding::Binding,
+    pattern::{
+        built_in_functions::CallBuiltIn,
+        function_definition::{ForeignFunctionDefinition, GritFunctionDefinition},
+        pattern_definition::PatternDefinition,
+        predicate_definition::PredicateDefinition,
+        resolved_pattern::ResolvedPattern,
+        state::State,
+        FileOwners,
+    },
 };
 use anyhow::Result;
 use marzano_language::target_language::TargetLanguage;
 use marzano_util::analysis_logs::AnalysisLogs;
 
 pub trait Context {
+    type B: Binding;
+
     fn pattern_definitions(&self) -> &[PatternDefinition];
 
     fn predicate_definitions(&self) -> &[PredicateDefinition];
@@ -26,9 +31,9 @@ pub trait Context {
         &self,
         call: &'a CallBuiltIn,
         context: &'a Self,
-        state: &mut State<'a>,
+        state: &mut State<'a, Self::B>,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>>;
+    ) -> Result<ResolvedPattern<'a, Self::B>>;
 
     #[cfg(all(
         feature = "network_requests_external",

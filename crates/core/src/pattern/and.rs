@@ -7,7 +7,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::Result;
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -68,10 +68,10 @@ impl Name for And {
 }
 
 impl Matcher for And {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -132,12 +132,12 @@ impl Name for PrAnd {
 }
 
 impl Evaluator for PrAnd {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         for p in self.predicates.iter() {
             let res = p.execute_func(state, context, logs)?;
             match res.predicator {

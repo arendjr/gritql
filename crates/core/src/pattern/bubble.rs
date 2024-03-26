@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::binding::Binding;
 use crate::context::Context;
 
 use super::compiler::CompilationContext;
@@ -113,10 +114,10 @@ impl Name for Bubble {
 }
 
 impl Matcher for Bubble {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

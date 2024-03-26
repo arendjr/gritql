@@ -7,7 +7,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -89,10 +89,10 @@ impl Name for If {
 }
 
 impl Matcher for If {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -179,12 +179,12 @@ impl Name for PrIf {
 }
 
 impl Evaluator for PrIf {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        init_state: &mut State<'a>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let mut state = init_state.clone();
         let condition = self.if_.execute_func(&mut state, context, logs)?;
         if condition.ret_val.is_some() {

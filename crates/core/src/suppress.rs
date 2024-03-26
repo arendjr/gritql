@@ -1,44 +1,8 @@
 use itertools::{EitherOrBoth, Itertools};
-use marzano_language::{
-    language::Language,
-    parent_traverse::{ParentTraverse, TreeSitterParentCursor},
-};
+use marzano_language::language::Language;
 use tree_sitter::{Node, Range};
 
-use crate::binding::Binding;
-
-impl<'a> Binding<'a> {
-    pub(crate) fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool {
-        let (src, node) = match self {
-            Self::Node(src, node) | Self::List(src, node, _) | Self::Empty(src, node, _) => {
-                (src, node)
-            }
-            Self::String(_, _) | Self::FileName(_) | Self::ConstantRef(_) => return false,
-        };
-        let target_range = node.range();
-        for n in
-            node.children(&mut node.walk())
-                .chain(ParentTraverse::new(TreeSitterParentCursor::new(
-                    node.clone(),
-                )))
-        {
-            let mut cursor = n.walk();
-            let children = n.children(&mut cursor);
-            for c in children {
-                if !(lang.is_comment(c.kind_id()) || lang.is_comment_wrapper(&c)) {
-                    continue;
-                }
-                if is_suppress_comment(&c, src, &target_range, current_name, lang) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-}
-
-fn is_suppress_comment(
+pub(crate) fn is_suppress_comment(
     comment_node: &Node,
     src: &str,
     target_range: &Range,

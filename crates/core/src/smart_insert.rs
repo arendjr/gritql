@@ -1,56 +1,7 @@
-use crate::binding::Binding;
-use itertools::Itertools;
-use marzano_language::{language::Language, target_language::TargetLanguage};
+use marzano_language::target_language::TargetLanguage;
 use tree_sitter::Node;
 
-impl<'a> Binding<'a> {
-    /// Returns the padding to use for inserting the given text.
-    pub(crate) fn get_insertion_padding(
-        &self,
-        text: &str,
-        is_first: bool,
-        language: &TargetLanguage,
-    ) -> Option<String> {
-        match self {
-            Self::List(src, node, field_id) => {
-                let mut cursor = node.walk();
-                let children = node
-                    .children_by_field_id(*field_id, &mut cursor)
-                    .collect_vec();
-                if children.is_empty() {
-                    return None;
-                }
-                calculate_padding(src, &children, text, is_first, language).or_else(|| {
-                    if children.len() == 1 {
-                        let child = children.first().unwrap();
-                        let child_text = child.utf8_text(src.as_bytes()).ok()?;
-                        if child.end_position().row() > child.start_position().row()
-                            && !child_text.ends_with('\n')
-                            && !text.starts_with('\n')
-                        {
-                            return Some("\n".to_string());
-                        }
-                    }
-                    None
-                })
-            }
-            Self::Node(src, node) => {
-                let node_text = node.utf8_text(src.as_bytes()).ok()?;
-                if language.is_statement(node.kind_id())
-                    && !node_text.ends_with('\n')
-                    && !text.starts_with('\n')
-                {
-                    Some("\n".to_string())
-                } else {
-                    None
-                }
-            }
-            Self::String(..) | Self::FileName(_) | Self::Empty(..) | Self::ConstantRef(_) => None,
-        }
-    }
-}
-
-fn calculate_padding(
+pub(crate) fn calculate_padding(
     src: &str,
     children: &[Node],
     insert: &str,

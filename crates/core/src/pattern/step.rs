@@ -11,6 +11,7 @@ use super::{
     FileOwner,
 };
 use crate::{
+    binding::Binding,
     context::Context,
     orphan::{get_orphaned_ranges, remove_orphaned_ranges},
     pattern::{InputRanges, MatchRanges},
@@ -148,14 +149,14 @@ impl Step {
     }
 }
 
-fn extract_file_pointer(file: &File) -> Option<FilePtr> {
+fn extract_file_pointer<B: Binding>(file: &File<B>) -> Option<FilePtr> {
     match file {
         File::Resolved(_) => None,
         File::Ptr(ptr) => Some(*ptr),
     }
 }
 
-fn handle_files(files_list: &ResolvedPattern) -> Option<Vec<FilePtr>> {
+fn handle_files<B: Binding>(files_list: &ResolvedPattern<B>) -> Option<Vec<FilePtr>> {
     if let ResolvedPattern::List(files) = files_list {
         files
             .iter()
@@ -172,7 +173,7 @@ fn handle_files(files_list: &ResolvedPattern) -> Option<Vec<FilePtr>> {
     }
 }
 
-fn extract_file_pointers(binding: &ResolvedPattern) -> Option<Vec<FilePtr>> {
+fn extract_file_pointers<B: Binding>(binding: &ResolvedPattern<B>) -> Option<Vec<FilePtr>> {
     match binding {
         ResolvedPattern::Binding(_) => None,
         ResolvedPattern::Snippets(_) => None,
@@ -185,10 +186,10 @@ fn extract_file_pointers(binding: &ResolvedPattern) -> Option<Vec<FilePtr>> {
 }
 
 impl Matcher for Step {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

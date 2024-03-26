@@ -7,7 +7,7 @@ use super::{
     state::State,
     variable::VariableSourceLocations,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -49,10 +49,10 @@ impl Maybe {
 }
 
 impl Matcher for Maybe {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -105,12 +105,12 @@ impl PrMaybe {
 }
 
 impl Evaluator for PrMaybe {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        init_state: &mut State<'a>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let mut state = init_state.clone();
         if self
             .predicate

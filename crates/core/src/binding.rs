@@ -1,7 +1,10 @@
+use crate::equivalence::are_equivalent;
 use crate::inline_snippets::inline_sorted_snippets_with_offset;
 use crate::pattern::resolved_pattern::CodeRange;
 use crate::pattern::state::{get_top_level_effects, FileRegistry};
 use crate::pattern::{Effect, EffectKind};
+use crate::smart_insert::calculate_padding;
+use crate::suppress::is_suppress_comment;
 use anyhow::{anyhow, Result};
 use grit_util::AstNode;
 use marzano_language::language::{FieldId, Language};
@@ -66,9 +69,57 @@ impl PartialEq for Constant {
     }
 }
 
+pub trait Binding: Clone + std::fmt::Debug + PartialEq {
+    fn get_sexp(&self) -> Option<String>;
+
+    /// The range where the binding is found in the source text.
+    fn position(&self) -> Option<Range>;
+
+    /// Returns the text of the binding.
+    fn text(&self) -> String;
+
+    /// Returns a reference to the source text of the file in which the binding
+    /// is found.
+    fn source(&self) -> Option<&str>;
+
+    /// Returns the path this binding applies to, if and only if this is a
+    /// filename binding.
+    fn as_filename(&self) -> Option<&Path>;
+
+    /// Returns whether the binding is empty.
+    fn is_empty(&self) -> bool;
+
+    /// Tests equivalence between two bindings.
+    ///
+    /// Unlike equality, this tests whether two bindings appear to match the
+    /// same thing.
+    fn is_equivalent_to(&self, other: &Self) -> bool;
+
+    fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool;
+
+    /// Logs an error about this binding if the given range is empty.
+    fn log_empty_field_rewrite_error<T>(
+        &self,
+        // FIXME: This introduces a dependency on TreeSitter.
+        language: &TargetLanguage,
+        logs: &mut AnalysisLogs,
+    ) -> Result<()>;
+
+    /// Returns the padding to use for inserting the given text.
+    fn get_insertion_padding(
+        &self,
+        text: &str,
+        is_first: bool,
+        language: &TargetLanguage,
+    ) -> Option<String>;
+
+    /// Returns the parent node of the binding.
+    fn parent_node(&self) -> Option<impl AstNode>;
+}
+
 #[derive(Debug, Clone)]
 // &str points to the file source
-pub enum Binding<'a> {
+pub(crate) enum MarzanoBinding<'a> {
     // used by slices that don't correspond to a node
     // currently only comment content.
     String(&'a str, Range),
@@ -81,7 +132,259 @@ pub enum Binding<'a> {
     ConstantRef(&'a Constant),
 }
 
-impl PartialEq for Binding<'_> {
+impl<'a> Binding for MarzanoBinding<'a> {
+    fn get_sexp(&self) -> Option<String> {
+        match self {
+            Self::Node(_, node) => Some(node.to_sexp().to_string()),
+            Self::List(_, parent_node, field_id) => {
+                let mut cursor = parent_node.walk();
+                let mut children = parent_node.children_by_field_id(*field_id, &mut cursor);
+                let mut result = String::new();
+                if let Some(node) = children.next() {
+                    result.push_str(&node.to_sexp());
+                    for node in children {
+                        result.push_str(",\n");
+                        result.push_str(&node.to_sexp());
+                    }
+                }
+                Some(result)
+            }
+            Self::String(..) | Self::FileName(_) | Self::Empty(..) | Self::ConstantRef(_) => None,
+        }
+    }
+
+    // todo implement for empty and empty list
+    fn position(&self) -> Option<Range> {
+        match self {
+            Self::Empty(_, _, _) => None,
+            Self::Node(_, node) => Some(Range::from(node.range())),
+            Self::String(_, range) => Some(range.to_owned()),
+            Self::List(_, parent_node, field_id) => {
+                let mut cursor = parent_node.walk();
+                let mut children = parent_node.children_by_field_id(*field_id, &mut cursor);
+
+                match children.next() {
+                    None => None,
+                    Some(first_node) => {
+                        let end_node: Node = match children.last() {
+                            None => first_node.clone(),
+                            Some(last_node) => last_node,
+                        };
+                        let mut leading_comment = first_node.clone();
+                        while let Some(comment) = leading_comment.prev_sibling() {
+                            if comment.kind() == "comment" {
+                                leading_comment = comment;
+                            } else {
+                                break;
+                            }
+                        }
+                        let mut trailing_comment = end_node;
+                        while let Some(comment) = trailing_comment.next_sibling() {
+                            if comment.kind() == "comment" {
+                                trailing_comment = comment;
+                            } else {
+                                break;
+                            }
+                        }
+                        Some(Range {
+                            start: Position::new(
+                                first_node.start_position().row() + 1,
+                                first_node.start_position().column() + 1,
+                            ),
+                            end: Position::new(
+                                trailing_comment.end_position().row() + 1,
+                                trailing_comment.end_position().column() + 1,
+                            ),
+                            start_byte: leading_comment.start_byte(),
+                            end_byte: trailing_comment.end_byte(),
+                        })
+                    }
+                }
+            }
+            Self::FileName(_) => None,
+            Self::ConstantRef(_) => None,
+        }
+    }
+
+    fn text(&self) -> String {
+        match self {
+            Self::Empty(_, _, _) => String::new(),
+            Self::Node(source, node) => {
+                NodeWithSource::new(node.clone(), source).text().to_string()
+            }
+            Self::String(s, r) => s[r.start_byte as usize..r.end_byte as usize].into(),
+            Self::FileName(s) => s.to_string_lossy().to_string(),
+            Self::List(source, _, _) => {
+                if let Some(pos) = self.position() {
+                    source[pos.start_byte as usize..pos.end_byte as usize].to_string()
+                } else {
+                    String::new()
+                }
+            }
+            Self::ConstantRef(c) => c.to_string(),
+        }
+    }
+
+    fn source(&self) -> Option<&str> {
+        match self {
+            Self::Empty(source, _, _) => Some(source),
+            Self::Node(source, _) => Some(source),
+            Self::String(source, _) => Some(source),
+            Self::List(source, _, _) => Some(source),
+            Self::FileName(..) | Self::ConstantRef(..) => None,
+        }
+    }
+
+    fn as_filename(&self) -> Option<&Path> {
+        match self {
+            Self::FileName(path) => Some(path),
+            Self::Empty(..)
+            | Self::Node(..)
+            | Self::String(..)
+            | Self::List(..)
+            | Self::ConstantRef(..) => None,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        matches!(self, Self::Empty(_, _, _))
+    }
+
+    fn is_equivalent_to(&self, other: &Self) -> bool {
+        // covers Node, and List with one element
+        if let (Some(binding1), Some(binding2)) = (self.singleton(), other.singleton()) {
+            return are_equivalent(binding1.0, &binding1.1, binding2.0, &binding2.1);
+        }
+
+        match self {
+            // should never occur covered by singleton
+            Self::Node(source1, node1) => match other {
+                Self::Node(source2, node2) => are_equivalent(source1, node1, source2, node2),
+                Self::String(str, range) => {
+                    str[range.start_byte as usize..range.end_byte as usize] == self.text()
+                }
+                Self::FileName(_) | Self::List(..) | Self::Empty(..) | Self::ConstantRef(_) => {
+                    false
+                }
+            },
+            Self::List(source1, parent_node1, field1) => match other {
+                Self::List(source2, parent_node2, field2) => {
+                    let mut cursor1 = parent_node1.walk();
+                    let mut cursor2 = parent_node2.walk();
+                    children_by_field_id_count(parent_node1, *field1)
+                        == children_by_field_id_count(parent_node2, *field2)
+                        && parent_node1
+                            .children_by_field_id(*field1, &mut cursor1)
+                            .zip(parent_node2.children_by_field_id(*field2, &mut cursor2))
+                            .all(|(node1, node2)| are_equivalent(source1, &node1, source2, &node2))
+                }
+                Self::String(..)
+                | Self::FileName(_)
+                | Self::Node(..)
+                | Self::Empty(..)
+                | Self::ConstantRef(_) => false,
+            },
+            // I suspect matching kind is too strict
+            Self::Empty(_, node1, field1) => match other {
+                Self::Empty(_, node2, field2) => {
+                    node1.kind_id() == node2.kind_id() && field1 == field2
+                }
+                Self::String(..)
+                | Self::FileName(_)
+                | Self::Node(..)
+                | Self::List(..)
+                | Self::ConstantRef(_) => false,
+            },
+            Self::ConstantRef(c1) => match other {
+                Self::ConstantRef(c2) => c1 == c2,
+                Self::String(..)
+                | Self::FileName(_)
+                | Self::Node(..)
+                | Self::List(..)
+                | Self::Empty(..) => false,
+            },
+            Self::String(s1, range) => {
+                s1[range.start_byte as usize..range.end_byte as usize] == other.text()
+            }
+            Self::FileName(s1) => other.as_filename().map_or(false, |s2| *s1 == s2),
+        }
+    }
+
+    fn get_insertion_padding(
+        &self,
+        text: &str,
+        is_first: bool,
+        language: &TargetLanguage,
+    ) -> Option<String> {
+        match self {
+            Self::List(src, node, field_id) => {
+                let mut cursor = node.walk();
+                let children = node
+                    .children_by_field_id(*field_id, &mut cursor)
+                    .collect_vec();
+                if children.is_empty() {
+                    return None;
+                }
+                calculate_padding(src, &children, text, is_first, language).or_else(|| {
+                    if children.len() == 1 {
+                        let child = children.first().unwrap();
+                        let child_text = child.utf8_text(src.as_bytes()).ok()?;
+                        if child.end_position().row() > child.start_position().row()
+                            && !child_text.ends_with('\n')
+                            && !text.starts_with('\n')
+                        {
+                            return Some("\n".to_string());
+                        }
+                    }
+                    None
+                })
+            }
+            Self::Node(src, node) => {
+                let node_text = node.utf8_text(src.as_bytes()).ok()?;
+                if language.is_statement(node.kind_id())
+                    && !node_text.ends_with('\n')
+                    && !text.starts_with('\n')
+                {
+                    Some("\n".to_string())
+                } else {
+                    None
+                }
+            }
+            Self::String(..) | Self::FileName(_) | Self::Empty(..) | Self::ConstantRef(_) => None,
+        }
+    }
+
+    fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool {
+        let (src, node) = match self {
+            Self::Node(src, node) | Self::List(src, node, _) | Self::Empty(src, node, _) => {
+                (src, node)
+            }
+            Self::String(_, _) | Self::FileName(_) | Self::ConstantRef(_) => return false,
+        };
+        let target_range = node.range();
+        for n in
+            node.children(&mut node.walk())
+                .chain(ParentTraverse::new(TreeSitterParentCursor::new(
+                    node.clone(),
+                )))
+        {
+            let mut cursor = n.walk();
+            let children = n.children(&mut cursor);
+            for c in children {
+                if !(lang.is_comment(c.kind_id()) || lang.is_comment_wrapper(&c)) {
+                    continue;
+                }
+                if is_suppress_comment(&c, src, &target_range, current_name, lang) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+}
+
+impl PartialEq for MarzanoBinding<'_> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Empty(_, _, _), Self::Empty(_, _, _)) => true,
@@ -204,9 +507,9 @@ impl EffectRange {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn linearize_binding<'a>(
+pub(crate) fn linearize_binding<'a, B: Binding>(
     language: &TargetLanguage,
-    effects: &[Effect<'a>],
+    effects: &[Effect<'a, B>],
     files: &FileRegistry<'a>,
     memo: &mut HashMap<CodeRange, Option<String>>,
     source: &'a str,
@@ -310,7 +613,7 @@ pub(crate) fn linearize_binding<'a>(
     Ok((res.into(), offset))
 }
 
-impl<'a> Binding<'a> {
+impl<'a> MarzanoBinding<'a> {
     pub(crate) fn from_constant(constant: &'a Constant) -> Self {
         Self::ConstantRef(constant)
     }
@@ -426,10 +729,10 @@ impl<'a> Binding<'a> {
         }
     }
 
-    pub(crate) fn linearized_text(
+    pub(crate) fn linearized_text<B: Binding>(
         &self,
         language: &TargetLanguage,
-        effects: &[Effect<'a>],
+        effects: &[Effect<'a, B>],
         files: &FileRegistry<'a>,
         memo: &mut HashMap<CodeRange, Option<String>>,
         distributed_indent: Option<usize>,

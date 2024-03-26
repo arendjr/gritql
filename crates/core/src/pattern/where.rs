@@ -10,7 +10,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::{context::Context, split_snippet::split_snippet};
+use crate::{binding::Binding, context::Context, split_snippet::split_snippet};
 use anyhow::{anyhow, Result};
 use core::fmt::Debug;
 use grit_util::{traverse, Order};
@@ -150,10 +150,10 @@ impl Name for Where {
 impl Matcher for Where {
     // order here is pattern then side condition, do we prefer side condition then pattern?
     // should the state be reset on failure?
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

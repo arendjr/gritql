@@ -29,9 +29,9 @@ impl Log {
         Self { variable, message }
     }
 
-    fn add_log<'a>(
+    fn add_log<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -58,7 +58,7 @@ impl Log {
                 .map(|v| v.text(&state.files).map(|s| s.to_string()))
                 .unwrap_or(Ok("Variable has no source".to_string()))?;
             log_builder.source(src);
-            let node: Option<&Binding> = value.and_then(|v| v.get_binding());
+            let node = value.and_then(|v| v.get_binding());
             // todo add support for other types of bindings
             if let Some(node) = node {
                 if let Some(range) = node.position() {
@@ -122,10 +122,10 @@ impl Log {
 }
 
 impl Matcher for Log {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        _binding: &super::resolved_pattern::ResolvedPattern<'a>,
-        state: &mut super::state::State<'a>,
+        _binding: &ResolvedPattern<'a, B>,
+        state: &mut super::state::State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -134,12 +134,12 @@ impl Matcher for Log {
 }
 
 impl Evaluator for Log {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let predicator = self.add_log(state, context, logs)?;
         Ok(FuncEvaluation {
             predicator,

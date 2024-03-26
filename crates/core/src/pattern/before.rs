@@ -5,7 +5,10 @@ use super::{
     variable::VariableSourceLocations,
     Node, State,
 };
-use crate::{binding::Constant, errors::debug};
+use crate::{
+    binding::{Binding, Constant},
+    errors::debug,
+};
 use crate::{context::Context, resolve};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
@@ -48,12 +51,12 @@ impl Before {
         Ok(Self::new(pattern))
     }
 
-    pub(crate) fn prev_pattern<'a>(
+    pub(crate) fn prev_pattern<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         let binding = pattern_to_binding(&self.before, state, context, logs)?;
         let Some(node) = binding.as_node() else {
             bail!("cannot get the node before this binding")
@@ -79,10 +82,10 @@ impl Name for Before {
 }
 
 impl Matcher for Before {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

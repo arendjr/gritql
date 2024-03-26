@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, ops};
 use marzano_util::analysis_logs::AnalysisLogs;
 use tree_sitter::Node;
 
-use crate::{context::Context, pattern::Step};
+use crate::{binding::Binding, context::Context, pattern::Step};
 
 use super::{
     compiler::CompilationContext,
@@ -82,10 +82,10 @@ impl Sequential {
 }
 
 impl Matcher for Sequential {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

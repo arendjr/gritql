@@ -5,7 +5,10 @@ use super::{
     state::State,
     variable::VariableSourceLocations,
 };
-use crate::{binding::Constant, context::Context};
+use crate::{
+    binding::{Binding, Constant},
+    context::Context,
+};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -62,19 +65,19 @@ impl Modulo {
         Ok(Self::new(left, right))
     }
 
-    pub(crate) fn call<'a>(
+    pub(crate) fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         let res = self.evaluate(state, context, logs)?;
         Ok(ResolvedPattern::Constant(Constant::Integer(res)))
     }
 
-    fn evaluate<'a>(
+    fn evaluate<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<i64> {
@@ -94,10 +97,10 @@ impl Name for Modulo {
 }
 
 impl Matcher for Modulo {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

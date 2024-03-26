@@ -32,36 +32,36 @@ use tree_sitter::Node;
  */
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ResolvedSnippet<'a> {
+pub enum ResolvedSnippet<'a, B: Binding> {
     // if refering to a dynamic_snippet, we can use the &str variant,
     // but if referring to the result of a BuiltIn, we need the
     // String variant
     Text(Cow<'a, str>),
-    Binding(Binding<'a>),
-    LazyFn(Box<LazyBuiltIn<'a>>),
+    Binding(B),
+    LazyFn(Box<LazyBuiltIn<'a, B>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedFile<'a> {
-    name: ResolvedPattern<'a>,
-    body: ResolvedPattern<'a>,
+pub struct ResolvedFile<'a, B: Binding> {
+    name: ResolvedPattern<'a, B>,
+    body: ResolvedPattern<'a, B>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum File<'a> {
-    Resolved(Box<ResolvedFile<'a>>),
+pub enum File<'a, B: Binding> {
+    Resolved(Box<ResolvedFile<'a, B>>),
     Ptr(FilePtr),
 }
 
-impl<'a> File<'a> {
-    pub(crate) fn name(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a> {
+impl<'a, B: Binding> File<'a, B> {
+    pub(crate) fn name(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a, B> {
         match self {
             File::Resolved(resolved) => resolved.name.clone(),
             File::Ptr(ptr) => ResolvedPattern::from_path(&files.get_file(*ptr).name),
         }
     }
 
-    pub(crate) fn absolute_path(&self, files: &FileRegistry<'a>) -> Result<ResolvedPattern<'a>> {
+    pub(crate) fn absolute_path(&self, files: &FileRegistry<'a>) -> Result<ResolvedPattern<'a, B>> {
         match self {
             File::Resolved(resolved) => {
                 let name = resolved.name.text(files)?;
@@ -74,7 +74,7 @@ impl<'a> File<'a> {
         }
     }
 
-    pub(crate) fn body(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a> {
+    pub(crate) fn body(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a, B> {
         match self {
             File::Resolved(resolved) => resolved.body.clone(),
             File::Ptr(ptr) => {
@@ -85,7 +85,7 @@ impl<'a> File<'a> {
         }
     }
 
-    pub(crate) fn binding(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a> {
+    pub(crate) fn binding(&self, files: &FileRegistry<'a>) -> ResolvedPattern<'a, B> {
         match self {
             File::Resolved(resolved) => resolved.body.clone(),
             File::Ptr(ptr) => {
@@ -98,17 +98,17 @@ impl<'a> File<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct JoinFn<'a> {
-    pub(crate) list: Vector<ResolvedPattern<'a>>,
+pub struct JoinFn<'a, B: Binding> {
+    pub(crate) list: Vector<ResolvedPattern<'a, B>>,
     separator: String,
 }
 
-impl<'a> JoinFn<'a> {
-    pub(crate) fn from_resolved(list: Vector<ResolvedPattern<'a>>, separator: String) -> Self {
+impl<'a, B: Binding> JoinFn<'a, B> {
+    pub(crate) fn from_resolved(list: Vector<ResolvedPattern<'a, B>>, separator: String) -> Self {
         Self { list, separator }
     }
 
-    pub(crate) fn from_list_binding(binding: &'_ Binding<'a>, separator: String) -> Option<Self> {
+    pub(crate) fn from_list_binding(binding: &'_ B, separator: String) -> Option<Self> {
         binding.list_items().map(|list_items| Self {
             list: list_items.map(ResolvedPattern::from_node).collect(),
             separator,
@@ -118,7 +118,7 @@ impl<'a> JoinFn<'a> {
     fn linearized_text(
         &self,
         language: &TargetLanguage,
-        effects: &[Effect<'a>],
+        effects: &[Effect<'a, B>],
         files: &FileRegistry<'a>,
         memo: &mut HashMap<CodeRange, Option<String>>,
         distributed_indent: Option<usize>,
@@ -154,15 +154,15 @@ impl<'a> JoinFn<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LazyBuiltIn<'a> {
-    Join(JoinFn<'a>),
+pub enum LazyBuiltIn<'a, B: Binding> {
+    Join(JoinFn<'a, B>),
 }
 
-impl<'a> LazyBuiltIn<'a> {
+impl<'a, B: Binding> LazyBuiltIn<'a, B> {
     fn linearized_text(
         &self,
         language: &TargetLanguage,
-        effects: &[Effect<'a>],
+        effects: &[Effect<'a, B>],
         files: &FileRegistry<'a>,
         memo: &mut HashMap<CodeRange, Option<String>>,
         distributed_indent: Option<usize>,
@@ -183,13 +183,13 @@ impl<'a> LazyBuiltIn<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ResolvedPattern<'a> {
-    Binding(Vector<Binding<'a>>),
-    Snippets(Vector<ResolvedSnippet<'a>>),
-    List(Vector<ResolvedPattern<'a>>),
-    Map(BTreeMap<String, ResolvedPattern<'a>>),
-    File(File<'a>),
-    Files(Box<ResolvedPattern<'a>>),
+pub enum ResolvedPattern<'a, B: Binding> {
+    Binding(Vector<B>),
+    Snippets(Vector<ResolvedSnippet<'a, B>>),
+    List(Vector<ResolvedPattern<'a, B>>),
+    Map(BTreeMap<String, ResolvedPattern<'a, B>>),
+    File(File<'a, B>),
+    Files(Box<ResolvedPattern<'a, B>>),
     Constant(Constant),
 }
 
@@ -252,8 +252,8 @@ pub fn _print_address(string: &str) {
     println!("ADDRESS: {:?}", address);
 }
 
-impl<'a> ResolvedSnippet<'a> {
-    pub fn from_binding(binding: Binding) -> ResolvedSnippet {
+impl<'a, B: Binding> ResolvedSnippet<'a, B> {
+    pub fn from_binding(binding: B) -> ResolvedSnippet<'a, B> {
         ResolvedSnippet::Binding(binding)
     }
 
@@ -281,7 +281,7 @@ impl<'a> ResolvedSnippet<'a> {
     pub(crate) fn linearized_text(
         &self,
         language: &TargetLanguage,
-        effects: &[Effect<'a>],
+        effects: &[Effect<'a, B>],
         files: &FileRegistry<'a>,
         memo: &mut HashMap<CodeRange, Option<String>>,
         distributed_indent: Option<usize>,
@@ -301,7 +301,7 @@ impl<'a> ResolvedSnippet<'a> {
         res
     }
 
-    pub(crate) fn is_truthy(&self, state: &mut State<'a>) -> Result<bool> {
+    pub(crate) fn is_truthy(&self, state: &mut State<'a, B>) -> Result<bool> {
         let truthiness = match self {
             Self::Binding(b) => b.is_truthy(),
             Self::Text(t) => !t.is_empty(),
@@ -311,11 +311,11 @@ impl<'a> ResolvedSnippet<'a> {
     }
 }
 
-impl<'a> ResolvedPattern<'a> {
+impl<'a, B: Binding> ResolvedPattern<'a, B> {
     pub fn extend(
         &mut self,
-        mut with: ResolvedPattern<'a>,
-        effects: &mut Vector<Effect<'a>>,
+        mut with: ResolvedPattern<'a, B>,
+        effects: &mut Vector<Effect<'a, B>>,
         language: &TargetLanguage,
     ) -> Result<()> {
         match self {
@@ -408,7 +408,7 @@ impl<'a> ResolvedPattern<'a> {
         None
     }
 
-    pub(crate) fn from_binding(binding: Binding<'a>) -> Self {
+    pub(crate) fn from_binding(binding: B) -> Self {
         Self::Binding(vector![binding])
     }
 
@@ -444,11 +444,11 @@ impl<'a> ResolvedPattern<'a> {
         Self::Snippets(vector![ResolvedSnippet::Text(string.into())])
     }
 
-    pub(crate) fn from_resolved_snippet(snippet: ResolvedSnippet<'a>) -> Self {
+    pub(crate) fn from_resolved_snippet(snippet: ResolvedSnippet<'a, B>) -> Self {
         Self::Snippets(vector![snippet])
     }
 
-    fn to_snippets(&self) -> Result<Vector<ResolvedSnippet<'a>>> {
+    fn to_snippets(&self) -> Result<Vector<ResolvedSnippet<'a, B>>> {
         match self {
             ResolvedPattern::Snippets(snippets) => Ok(snippets.clone()),
             ResolvedPattern::Binding(bindings) => Ok(vector![ResolvedSnippet::from_binding(
@@ -493,7 +493,7 @@ impl<'a> ResolvedPattern<'a> {
         }
     }
 
-    pub fn get_binding(&self) -> Option<&Binding> {
+    pub fn get_binding(&self) -> Option<&impl Binding> {
         if let ResolvedPattern::Binding(bindings) = self {
             bindings.last()
         } else {
@@ -503,7 +503,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub fn from_dynamic_snippet(
         snippet: &'a DynamicSnippet,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<Self> {
@@ -537,7 +537,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub fn from_dynamic_pattern(
         pattern: &'a DynamicPattern,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<Self> {
@@ -579,7 +579,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub(crate) fn from_accessor(
         accessor: &'a Accessor,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<Self> {
@@ -595,7 +595,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub(crate) fn from_list_index(
         index: &'a ListIndex,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<Self> {
@@ -611,7 +611,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub fn from_pattern(
         pattern: &'a Pattern,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<Self> {
@@ -731,7 +731,7 @@ impl<'a> ResolvedPattern<'a> {
     pub(crate) fn linearized_text(
         &self,
         language: &TargetLanguage,
-        effects: &[Effect<'a>],
+        effects: &[Effect<'a, B>],
         files: &FileRegistry<'a>,
         memo: &mut HashMap<CodeRange, Option<String>>,
         should_pad_snippet: bool,
@@ -939,7 +939,7 @@ impl<'a> ResolvedPattern<'a> {
 
     pub(crate) fn normalize_insert(
         &mut self,
-        binding: &Binding<'a>,
+        binding: &B,
         is_first: bool,
         language: &TargetLanguage,
     ) -> Result<()> {
@@ -957,7 +957,7 @@ impl<'a> ResolvedPattern<'a> {
         Ok(())
     }
 
-    pub(crate) fn is_truthy(&self, state: &mut State<'a>) -> Result<bool> {
+    pub(crate) fn is_truthy(&self, state: &mut State<'a, B>) -> Result<bool> {
         let truthiness = match self {
             Self::Binding(bindings) => bindings.last().map_or(false, Binding::is_truthy),
             Self::List(elements) => !elements.is_empty(),
@@ -977,12 +977,12 @@ impl<'a> ResolvedPattern<'a> {
     }
 }
 
-pub(crate) fn pattern_to_binding<'a>(
+pub(crate) fn pattern_to_binding<'a, B: Binding>(
     pattern: &'a Pattern,
-    state: &mut State<'a>,
+    state: &mut State<'a, B>,
     context: &'a impl Context,
     logs: &mut AnalysisLogs,
-) -> Result<Binding<'a>> {
+) -> Result<B> {
     let resolved = ResolvedPattern::from_pattern(pattern, state, context, logs)?;
     if let ResolvedPattern::Binding(binding) = resolved {
         Ok(binding
@@ -996,12 +996,12 @@ pub(crate) fn pattern_to_binding<'a>(
 
 // borrow here seems off I think we want Vec<&ResolvedPattern>
 // since we'll be getting pointers to var_content
-pub fn patterns_to_resolved<'a>(
+pub fn patterns_to_resolved<'a, B: Binding>(
     patterns: &'a [Option<Pattern>],
-    state: &mut State<'a>,
+    state: &mut State<'a, B>,
     context: &'a impl Context,
     logs: &mut AnalysisLogs,
-) -> Result<Vec<Option<ResolvedPattern<'a>>>> {
+) -> Result<Vec<Option<ResolvedPattern<'a, B>>>> {
     patterns
         .iter()
         .map(|p| match p {

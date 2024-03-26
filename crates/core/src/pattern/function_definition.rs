@@ -1,4 +1,7 @@
-use crate::{binding::Constant, context::Context};
+use crate::{
+    binding::{Binding, Constant},
+    context::Context,
+};
 use anyhow::{anyhow, bail, Result};
 #[cfg(feature = "external_functions")]
 use marzano_externals::function::ExternalFunction;
@@ -19,13 +22,13 @@ use super::{
 };
 
 pub(crate) trait FunctionDefinition {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         args: &'a [Option<Pattern>],
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation>;
+    ) -> Result<FuncEvaluation<B>>;
 }
 
 #[derive(Clone, Debug)]
@@ -109,13 +112,13 @@ impl GritFunctionDefinition {
 }
 
 impl FunctionDefinition for GritFunctionDefinition {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         args: &'a [Option<Pattern>],
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         state.reset_vars(self.scope, args);
         self.function.execute_func(state, context, logs)
     }
@@ -199,23 +202,23 @@ impl ForeignFunctionDefinition {
 
 impl FunctionDefinition for ForeignFunctionDefinition {
     #[cfg(not(feature = "external_functions_common"))]
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        _state: &mut State<'a>,
+        _state: &mut State<'a, B>,
         _context: &'a impl Context,
         _args: &'a [Option<Pattern>],
         _logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         bail!("External functions are not enabled in your environment")
     }
     #[cfg(feature = "external_functions_common")]
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         args: &'a [Option<Pattern>],
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let param_names = self
             .params
             .iter()

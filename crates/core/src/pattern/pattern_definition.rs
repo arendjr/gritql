@@ -6,7 +6,7 @@ use super::{
     variable::{get_variables, Variable, VariableSourceLocations},
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -95,10 +95,10 @@ impl PatternDefinition {
         Ok(())
     }
 
-    pub(crate) fn call<'a>(
+    pub(crate) fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
-        binding: &ResolvedPattern<'a>,
+        state: &mut State<'a, B>,
+        binding: &ResolvedPattern<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
         args: &'a [Option<Pattern>],

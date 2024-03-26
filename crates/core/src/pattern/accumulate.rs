@@ -15,6 +15,7 @@ use super::{
     State,
 };
 use super::{Effect, EffectKind};
+use crate::binding::Binding;
 use crate::context::Context;
 use tree_sitter::Node;
 
@@ -139,10 +140,10 @@ impl Name for Accumulate {
 }
 
 impl Matcher for Accumulate {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        context_node: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        context_node: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -196,9 +197,9 @@ impl Matcher for Accumulate {
                     )
                 }
             };
-            let mut replacement: ResolvedPattern<'_> =
+            let mut replacement: ResolvedPattern<'_, B> =
                 ResolvedPattern::from_dynamic_pattern(dynamic_right, state, context, logs)?;
-            let effects: Result<Vec<Effect>> = bindings
+            let effects: Result<Vec<Effect<B>>> = bindings
                 .iter()
                 .map(|b| {
                     let is_first = !state.effects.iter().any(|e| e.binding == *b);
@@ -218,12 +219,12 @@ impl Matcher for Accumulate {
 }
 
 impl Evaluator for Accumulate {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         if let Pattern::Variable(var) = &self.left {
             let var = state.trace_var(var);
             let append = ResolvedPattern::from_pattern(&self.right, state, context, logs)?;

@@ -7,7 +7,7 @@ use super::{
     variable::{is_reserved_metavariable, VariableSourceLocations},
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use marzano_language::{language::GRIT_METAVARIABLE_PREFIX, target_language::TargetLanguage};
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -75,10 +75,10 @@ impl Name for Assignment {
 }
 
 impl Matcher for Assignment {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        _context_node: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        _context_node: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -89,13 +89,13 @@ impl Matcher for Assignment {
 }
 
 impl Evaluator for Assignment {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
-        let resolved: ResolvedPattern<'_> =
+    ) -> Result<FuncEvaluation<B>> {
+        let resolved: ResolvedPattern<'_, B> =
             ResolvedPattern::from_pattern(&self.pattern, state, context, logs)?;
         self.container.set_resolved(state, resolved)?;
         Ok(FuncEvaluation {

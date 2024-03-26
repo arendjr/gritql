@@ -12389,10 +12389,10 @@ fn rust_match_fn_params() {
             .unwrap(),
             source: r#"
                 |impl Matcher for FilePattern {
-                |    fn execute<'a>(
+                |    fn execute<'a, B: Binding>(
                 |        &'a self,
-                |        resolved_pattern: &ResolvedPattern<'a>,
-                |        state: &mut State<'a>,
+                |        resolved_pattern: &ResolvedPattern<'a, B>,
+                |        state: &mut State<'a, B>,
                 |        context: &Context<'a>,
                 |        logs: &mut AnalysisLogs,
                 |    ) -> Result<bool> {
@@ -12404,10 +12404,10 @@ fn rust_match_fn_params() {
             .unwrap(),
             expected: r#"
                 |impl Matcher for FilePattern {
-                |    async fn execute<'a>(
+                |    async fn execute<'a, B: Binding>(
                 |        &'a self,
-                |        resolved_pattern: &ResolvedPattern<'a>,
-                |        state: &mut State<'a>,
+                |        resolved_pattern: &ResolvedPattern<'a, B>,
+                |        state: &mut State<'a, B>,
                 |        context: &Context<'a>,
                 |        logs: &mut AnalysisLogs,
                 |    ) -> Result<bool> {

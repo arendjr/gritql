@@ -65,7 +65,7 @@ mod variable_content;
 mod r#where;
 mod within;
 use crate::{
-    binding::Binding,
+    binding::{Binding, MarzanoBinding},
     context::Context,
     pattern::{compiler::DEFAULT_FILE_NAME, patterns::Matcher, resolved_pattern::ResolvedPattern},
 };
@@ -132,12 +132,12 @@ pub const MAX_FILE_SIZE: usize = 1_000_000;
  *
  * E.g., If a Node would contain a tree-sitter cursor, that would not be safe.
  */
-pub trait Work {
+pub trait Work<B: Binding> {
     // it is important that any implementors of Work
     // do not compute-expensive things in execute
     // it should be stored somewhere in the struct of the implementor
     // fn execute(&self, state: &mut State) -> Vec<Match>;
-    fn execute(&self, state: &mut State);
+    fn execute(&self, state: &mut State<B>);
 }
 
 #[derive(Debug, Default)]
@@ -275,7 +275,7 @@ impl From<Vec<FilePtr>> for FilePattern {
     }
 }
 
-impl From<FilePattern> for ResolvedPattern<'_> {
+impl<B: Binding> From<FilePattern> for ResolvedPattern<'_, B> {
     fn from(val: FilePattern) -> Self {
         match val {
             FilePattern::Single(file) => ResolvedPattern::File(File::Ptr(file)),
@@ -463,7 +463,7 @@ impl Problem {
         context: &ExecutionContext,
         mut done_files: Vec<MatchResult>,
     ) {
-        let mut outputs = match self.execute(binding, owned_files, context) {
+        let mut outputs = match self.execute::<MarzanoBinding>(binding, owned_files, context) {
             Result::Err(err) => files
                 .iter()
                 .map(|file| {
@@ -653,7 +653,7 @@ impl Problem {
         }
     }
 
-    fn execute(
+    fn execute<B: Binding>(
         &self,
         binding: FilePattern,
         owned_files: &FileOwners,
@@ -680,7 +680,7 @@ impl Problem {
             .map(|scope| {
                 vector![scope
                     .iter()
-                    .map(|s| Box::new(VariableContent::new(s.name.clone())))
+                    .map(|s| Box::new(VariableContent::<B>::new(s.name.clone())))
                     .collect()]
             })
             .collect();
@@ -740,9 +740,9 @@ pub enum EffectKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct Effect<'a> {
-    pub binding: Binding<'a>,
-    pub(crate) pattern: ResolvedPattern<'a>,
+pub struct Effect<'a, B: Binding> {
+    pub binding: B,
+    pub(crate) pattern: ResolvedPattern<'a, B>,
     pub kind: EffectKind,
 }
 
@@ -819,6 +819,8 @@ impl<'a> MarzanoContext<'a> {
 }
 
 impl<'a> Context for MarzanoContext<'a> {
+    type B = MarzanoBinding<'a>;
+
     fn pattern_definitions(&self) -> &[PatternDefinition] {
         self.pattern_definitions
     }
@@ -843,9 +845,9 @@ impl<'a> Context for MarzanoContext<'a> {
         &self,
         call: &'b CallBuiltIn,
         context: &'b Self,
-        state: &mut State<'b>,
+        state: &mut State<'b, Self::B>,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'b>> {
+    ) -> Result<ResolvedPattern<'b, Self::B>> {
         self.built_ins.call(call, context, state, logs)
     }
 

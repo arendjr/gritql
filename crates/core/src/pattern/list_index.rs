@@ -96,7 +96,7 @@ impl ListIndex {
         Ok(Self { list, index })
     }
 
-    fn get_index<'a>(&'a self, state: &State<'a>) -> Result<isize> {
+    fn get_index<'a, B: Binding>(&'a self, state: &State<'a, B>) -> Result<isize> {
         match &self.index {
             ContainerOrIndex::Container(c) => {
                 let raw_index = c
@@ -116,10 +116,10 @@ impl ListIndex {
         }
     }
 
-    pub(crate) fn get<'a, 'b>(
+    pub(crate) fn get<'a, 'b, B: Binding>(
         &'a self,
-        state: &'b State<'a>,
-    ) -> Result<Option<PatternOrResolved<'a, 'b>>> {
+        state: &'b State<'a, B>,
+    ) -> Result<Option<PatternOrResolved<'a, 'b, B>>> {
         let index = self.get_index(state)?;
         match &self.list {
             ListOrContainer::Container(c) => match c.get_pattern_or_resolved(state)? {
@@ -149,10 +149,10 @@ impl ListIndex {
         }
     }
 
-    pub(crate) fn get_mut<'a, 'b>(
+    pub(crate) fn get_mut<'a, 'b, B: Binding>(
         &'a self,
-        state: &'b mut State<'a>,
-    ) -> Result<Option<PatternOrResolvedMut<'a, 'b>>> {
+        state: &'b mut State<'a, B>,
+    ) -> Result<Option<PatternOrResolvedMut<'a, 'b, B>>> {
         let index = self.get_index(state)?;
         match &self.list {
             ListOrContainer::Container(c) => match c.get_pattern_or_resolved_mut(state)? {
@@ -182,11 +182,11 @@ impl ListIndex {
         }
     }
 
-    pub(crate) fn set_resolved<'a>(
+    pub(crate) fn set_resolved<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
-        value: ResolvedPattern<'a>,
-    ) -> Result<Option<ResolvedPattern<'a>>> {
+        state: &mut State<'a, B>,
+        value: ResolvedPattern<'a, B>,
+    ) -> Result<Option<ResolvedPattern<'a, B>>> {
         let index = self.get_index(state)?;
         match &self.list {
             ListOrContainer::Container(c) => match c.get_pattern_or_resolved_mut(state)? {
@@ -219,10 +219,10 @@ impl Name for ListIndex {
 }
 
 impl Matcher for ListIndex {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

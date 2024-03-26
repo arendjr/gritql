@@ -5,7 +5,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::{context::Context, resolve};
+use crate::{binding::Binding, context::Context, resolve};
 use anyhow::{anyhow, Result};
 use im::vector;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -55,10 +55,10 @@ impl Name for Some {
 }
 
 impl Matcher for Some {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

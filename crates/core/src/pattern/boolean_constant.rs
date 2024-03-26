@@ -3,7 +3,7 @@ use super::{
     resolved_pattern::ResolvedPattern,
     state::State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::Result;
 use marzano_util::analysis_logs::AnalysisLogs;
 use tree_sitter::Node;
@@ -36,10 +36,10 @@ impl Name for BooleanConstant {
 }
 
 impl Matcher for BooleanConstant {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> Result<bool> {

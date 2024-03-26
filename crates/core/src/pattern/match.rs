@@ -7,7 +7,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::{context::Context, errors::debug};
+use crate::{binding::Binding, context::Context, errors::debug};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -68,12 +68,12 @@ impl Name for Match {
 }
 
 impl Evaluator for Match {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         match &self.val {
             Container::Variable(var) => {
                 let var = state.trace_var(var);

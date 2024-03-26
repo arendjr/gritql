@@ -19,7 +19,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -225,12 +225,12 @@ impl Name for Predicate {
 }
 
 impl Evaluator for Predicate {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         match self {
             Predicate::Call(call) => call.execute_func(state, context, logs),
             Predicate::Or(or) => or.execute_func(state, context, logs),

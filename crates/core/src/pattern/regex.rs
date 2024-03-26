@@ -6,7 +6,7 @@ use super::{
     variable::{Variable, VariableSourceLocations},
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_language::{language::Language, target_language::TargetLanguage};
@@ -131,10 +131,10 @@ impl RegexPattern {
         ))))
     }
 
-    pub(crate) fn execute_matching<'a>(
+    pub(crate) fn execute_matching<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
         must_match_entire_string: bool,
@@ -232,10 +232,10 @@ impl Name for RegexPattern {
 }
 
 impl Matcher for RegexPattern {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

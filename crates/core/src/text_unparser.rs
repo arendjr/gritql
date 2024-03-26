@@ -1,4 +1,4 @@
-use crate::binding::linearize_binding;
+use crate::binding::{linearize_binding, Binding};
 use crate::pattern::resolved_pattern::CodeRange;
 use crate::pattern::state::FileRegistry;
 use crate::pattern::Effect;
@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
  */
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn apply_effects<'a>(
+pub(crate) fn apply_effects<'a, B: Binding>(
     code: &'a str,
-    effects: Vector<Effect<'a>>,
+    effects: Vector<Effect<'a, B>>,
     files: &FileRegistry<'a>,
     the_filename: &Path,
     new_filename: &mut PathBuf,

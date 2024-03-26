@@ -64,10 +64,10 @@ impl Name for Or {
 }
 
 impl Matcher for Or {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -152,12 +152,12 @@ impl Name for PrOr {
 }
 
 impl Evaluator for PrOr {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        init_state: &mut State<'a>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         for p in self.predicates.iter() {
             let mut state = init_state.clone();
             let res = p.execute_func(&mut state, context, logs)?;

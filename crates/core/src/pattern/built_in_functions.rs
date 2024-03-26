@@ -1,4 +1,7 @@
-use crate::{binding::Constant, context::Context};
+use crate::{
+    binding::{Binding, Constant, MarzanoBinding},
+    context::Context,
+};
 use itertools::Itertools;
 use marzano_util::analysis_logs::AnalysisLogs;
 use rand::prelude::SliceRandom;
@@ -53,12 +56,12 @@ impl CallBuiltIn {
 }
 
 impl GritCall for CallBuiltIn {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         context.call_built_in(self, context, state, logs)
     }
 }
@@ -76,9 +79,9 @@ impl Name for CallBuiltIn {
 type F = dyn for<'a> Fn(
         &'a [Option<Pattern>],
         &'a MarzanoContext<'a>,
-        &mut State<'a>,
+        &mut State<'a, MarzanoBinding<'a>>,
         &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>>
+    ) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>>
     + Send
     + Sync;
 
@@ -93,9 +96,9 @@ impl BuiltInFunction {
         &self,
         args: &'a [Option<Pattern>],
         context: &'a MarzanoContext<'a>,
-        state: &mut State<'a>,
+        state: &mut State<'a, MarzanoBinding<'a>>,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
         (self.func)(args, context, state, logs)
     }
 
@@ -121,9 +124,9 @@ impl BuiltIns {
         &self,
         call: &'a CallBuiltIn,
         context: &'a MarzanoContext<'a>,
-        state: &mut State<'a>,
+        state: &mut State<'a, MarzanoBinding<'a>>,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
         self.0[call.index].call(&call.args, context, state, logs)
     }
 
@@ -182,9 +185,9 @@ impl From<Vec<BuiltInFunction>> for BuiltIns {
 fn resolve_path_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let current_file = get_absolute_file_name(state)?;
@@ -209,9 +212,9 @@ fn capitalize(s: &str) -> String {
 fn capitalize_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let s = match &args[0] {
@@ -224,9 +227,9 @@ fn capitalize_fn<'a>(
 fn lowercase_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let s = match &args[0] {
@@ -239,9 +242,9 @@ fn lowercase_fn<'a>(
 fn uppercase_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let s = match &args[0] {
@@ -254,9 +257,9 @@ fn uppercase_fn<'a>(
 fn text_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let s = match args.first() {
@@ -269,9 +272,9 @@ fn text_fn<'a>(
 fn trim_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let trim_chars = match &args[1] {
@@ -293,9 +296,9 @@ fn trim_fn<'a>(
 fn split_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let string = if let Some(string) = &args[0] {
@@ -308,7 +311,7 @@ fn split_fn<'a>(
     } else {
         bail!("split requires parameter separator")
     };
-    let parts: Vector<ResolvedPattern> = string
+    let parts: Vector<ResolvedPattern<MarzanoBinding<'a>>> = string
         .split(&separator.as_ref())
         .map(|s| ResolvedPattern::Snippets(vector![ResolvedSnippet::Text(s.to_string().into())]))
         .collect();
@@ -318,9 +321,9 @@ fn split_fn<'a>(
 fn random_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     match args.as_slice() {
@@ -350,9 +353,9 @@ fn random_fn<'a>(
 fn join_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let separator = &args[1];
@@ -379,9 +382,9 @@ fn join_fn<'a>(
 fn distinct_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let list = args.into_iter().next().unwrap();
@@ -420,9 +423,9 @@ fn distinct_fn<'a>(
 fn shuffle_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let list = args
@@ -466,9 +469,9 @@ fn shuffle_fn<'a>(
 fn length_fn<'a>(
     args: &'a [Option<Pattern>],
     context: &'a MarzanoContext<'a>,
-    state: &mut State<'a>,
+    state: &mut State<'a, MarzanoBinding<'a>>,
     logs: &mut AnalysisLogs,
-) -> Result<ResolvedPattern<'a>> {
+) -> Result<ResolvedPattern<'a, MarzanoBinding<'a>>> {
     let args = patterns_to_resolved(args, state, context, logs)?;
 
     let list = args.into_iter().next().unwrap();

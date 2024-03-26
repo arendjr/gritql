@@ -11,7 +11,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 use marzano_language::language::Language;
@@ -276,10 +276,10 @@ impl Name for Call {
 // todo parameters, and name should both be usize references
 // argument should throw an error if its not a parameter at compile time
 impl Matcher for Call {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -363,12 +363,12 @@ impl Name for PrCall {
 }
 
 impl Evaluator for PrCall {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let predicate_definition = &context.predicate_definitions().get(self.index);
         if let Some(predicate_definition) = predicate_definition {
             let predicator = predicate_definition.call(state, context, &self.args, logs)?;

@@ -38,10 +38,10 @@ impl Name for StringConstant {
 // this does what a raw string should do
 // TODO: rename this, and implement StringConstant that checks sort.
 impl Matcher for StringConstant {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -82,10 +82,10 @@ impl Name for AstLeafNode {
 }
 
 impl Matcher for AstLeafNode {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        _state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        _state: &mut State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> Result<bool> {

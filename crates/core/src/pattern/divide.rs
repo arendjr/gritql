@@ -7,7 +7,10 @@ use super::{
     state::State,
     variable::VariableSourceLocations,
 };
-use crate::{binding::Constant, context::Context};
+use crate::{
+    binding::{Binding, Constant},
+    context::Context,
+};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use tree_sitter::Node;
@@ -63,19 +66,19 @@ impl Divide {
         Ok(Self::new(left, right))
     }
 
-    pub(crate) fn call<'a>(
+    pub(crate) fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         let res = self.evaluate(state, context, logs)?;
         Ok(ResolvedPattern::Constant(Constant::Float(res)))
     }
 
-    fn evaluate<'a>(
+    fn evaluate<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<f64> {
@@ -93,10 +96,10 @@ impl Name for Divide {
 }
 
 impl Matcher for Divide {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

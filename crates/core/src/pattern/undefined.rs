@@ -1,5 +1,5 @@
 use super::{resolved_pattern::ResolvedPattern, state::State};
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::Result;
 use marzano_util::analysis_logs::AnalysisLogs;
 
@@ -9,9 +9,9 @@ use marzano_util::analysis_logs::AnalysisLogs;
 pub(crate) struct Undefined {}
 
 impl Undefined {
-    pub(crate) fn execute<'a>(
-        binding: &ResolvedPattern<'a>,
-        _init_state: &mut State<'a>,
+    pub(crate) fn execute<'a, B: Binding>(
+        binding: &ResolvedPattern<'a, B>,
+        _init_state: &mut State<'a, B>,
         _context: &'a impl Context,
         _logs: &mut AnalysisLogs,
     ) -> Result<bool> {

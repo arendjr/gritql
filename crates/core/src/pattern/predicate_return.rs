@@ -6,7 +6,7 @@ use super::{
     state::State,
     variable::VariableSourceLocations,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::collections::BTreeMap;
@@ -49,12 +49,12 @@ impl PrReturn {
 }
 
 impl Evaluator for PrReturn {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let resolved = ResolvedPattern::from_pattern(&self.pattern, state, context, logs)?;
         Ok(FuncEvaluation {
             predicator: false,

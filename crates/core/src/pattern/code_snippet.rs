@@ -5,7 +5,7 @@ use super::{
     variable::{register_variable, VariableSourceLocations},
     State,
 };
-use crate::{context::Context, resolve};
+use crate::{binding::Binding, context::Context, resolve};
 use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
 use marzano_language::{
@@ -97,10 +97,10 @@ impl Name for CodeSnippet {
 
 impl Matcher for CodeSnippet {
     // wrong, but whatever for now
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        resolved_pattern: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        resolved_pattern: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

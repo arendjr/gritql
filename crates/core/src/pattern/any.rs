@@ -7,7 +7,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::Result;
 use core::fmt::Debug;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -68,10 +68,10 @@ impl Matcher for Any {
     // apply all successful updates to the state
     // must have at least one successful match
     // return soft and failed on failure
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -143,12 +143,12 @@ impl Name for PrAny {
 }
 
 impl Evaluator for PrAny {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        init_state: &mut State<'a>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let mut matched = false;
         let mut cur_state = init_state.clone();
         for predicate in &self.predicates {

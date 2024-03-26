@@ -5,7 +5,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::{context::Context, resolve};
+use crate::{binding::Binding, context::Context, resolve};
 use anyhow::{anyhow, Result};
 use core::fmt::Debug;
 use marzano_language::parent_traverse::{ParentTraverse, TreeSitterParentCursor};
@@ -56,10 +56,10 @@ impl Name for Within {
 }
 
 impl Matcher for Within {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        init_state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        init_state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {

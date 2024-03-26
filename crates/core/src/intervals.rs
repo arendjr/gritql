@@ -1,6 +1,9 @@
 use std::{cmp::Ordering, ops::Range};
 
-use crate::pattern::{state::EffectRange, EffectKind};
+use crate::{
+    binding::Binding,
+    pattern::{state::EffectRange, EffectKind},
+};
 
 pub trait Interval {
     fn interval(&self) -> (u32, u32);
@@ -64,11 +67,11 @@ where
     top_level
 }
 
-pub fn get_top_level_intervals_in_range(
-    effects: Vec<EffectRange>,
+pub fn get_top_level_intervals_in_range<B: Binding>(
+    effects: Vec<EffectRange<B>>,
     left: u32,
     right: u32,
-) -> Vec<EffectRange> {
+) -> Vec<EffectRange<B>> {
     let mut top_level = Vec::with_capacity(effects.len());
     let mut top_level_open = right;
     for e in effects.into_iter().rev() {

@@ -33,10 +33,10 @@ use tree_sitter::Node;
 
 pub(crate) const GLOBAL_VARS_SCOPE_INDEX: usize = 0;
 
-struct VariableMirror<'a> {
+struct VariableMirror<B: Binding> {
     scope: usize,
     index: usize,
-    binding: Binding<'a>,
+    binding: B,
 }
 
 impl Variable {
@@ -44,10 +44,10 @@ impl Variable {
         Self { scope, index }
     }
 
-    pub(crate) fn get_pattern_or_resolved<'a, 'b>(
+    pub(crate) fn get_pattern_or_resolved<'a, 'b, B: Binding>(
         &self,
-        state: &'b State<'a>,
-    ) -> Result<Option<PatternOrResolved<'a, 'b>>> {
+        state: &'b State<'a, B>,
+    ) -> Result<Option<PatternOrResolved<'a, 'b, B>>> {
         let v = state.trace_var(self);
         let content = &state.bindings[v.scope].last().unwrap()[v.index];
         if let Some(pattern) = content.pattern {
@@ -58,10 +58,10 @@ impl Variable {
             bail!("variable has no pattern or value")
         }
     }
-    pub(crate) fn get_pattern_or_resolved_mut<'a, 'b>(
+    pub(crate) fn get_pattern_or_resolved_mut<'a, 'b, B: Binding>(
         &self,
-        state: &'b mut State<'a>,
-    ) -> Result<Option<PatternOrResolvedMut<'a, 'b>>> {
+        state: &'b mut State<'a, B>,
+    ) -> Result<Option<PatternOrResolvedMut<'a, 'b, B>>> {
         let v = state.trace_var(self);
         let content = &mut state.bindings[v.scope].back_mut().unwrap()[v.index];
         if let Some(pattern) = content.pattern {
@@ -109,16 +109,16 @@ impl Variable {
         register_variable_optional_range(name, None, vars, global_vars, vars_array, scope_index)
     }
 
-    pub(crate) fn text<'a>(&self, state: &State<'a>) -> Result<Cow<'a, str>> {
+    pub(crate) fn text<'a, B: Binding>(&self, state: &State<'a, B>) -> Result<Cow<'a, str>> {
         state.bindings[self.scope].last().unwrap()[self.index].text(state)
     }
 
-    fn execute_resolved<'a>(
+    fn execute_resolved<'a, B: Binding>(
         &self,
-        resolved_pattern: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        resolved_pattern: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
     ) -> Result<Option<bool>> {
-        let mut variable_mirrors: Vec<VariableMirror> = Vec::new();
+        let mut variable_mirrors: Vec<VariableMirror<B>> = Vec::new();
         {
             let variable_content = &mut **(state
                 .bindings
@@ -309,10 +309,10 @@ impl Name for Variable {
 }
 
 impl Matcher for Variable {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        resolved_pattern: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        resolved_pattern: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -353,7 +353,9 @@ impl Matcher for Variable {
     }
 }
 
-pub(crate) fn get_absolute_file_name(state: &State<'_>) -> Result<String, anyhow::Error> {
+pub(crate) fn get_absolute_file_name<B: Binding>(
+    state: &State<'_, B>,
+) -> Result<String, anyhow::Error> {
     let file = state.bindings[GLOBAL_VARS_SCOPE_INDEX].last().unwrap()[ABSOLUTE_PATH_INDEX]
         .value
         .as_ref();
@@ -363,7 +365,7 @@ pub(crate) fn get_absolute_file_name(state: &State<'_>) -> Result<String, anyhow
     Ok(file)
 }
 
-pub(crate) fn get_file_name(state: &State<'_>) -> Result<String, anyhow::Error> {
+pub(crate) fn get_file_name<B: Binding>(state: &State<'_, B>) -> Result<String, anyhow::Error> {
     let file = state.bindings[GLOBAL_VARS_SCOPE_INDEX].last().unwrap()[FILENAME_INDEX]
         .value
         .as_ref();

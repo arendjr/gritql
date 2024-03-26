@@ -4,6 +4,7 @@ use std::ops::Range as StdRange;
 
 use super::compiler::MATCH_VAR;
 use super::FileOwner;
+use crate::binding::Binding;
 use crate::intervals::{earliest_deadline_sort, get_top_level_intervals_in_range, Interval};
 use anyhow::{anyhow, Result};
 use anyhow::{bail, Ok};
@@ -22,12 +23,12 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct EffectRange<'a> {
+pub struct EffectRange<'a, B: Binding> {
     range: StdRange<u32>,
-    pub effect: Effect<'a>,
+    pub effect: Effect<'a, B>,
 }
 
-impl Interval for EffectRange<'_> {
+impl<B: Binding> Interval for EffectRange<'_, B> {
     fn interval(&self) -> (u32, u32) {
         (self.range.start, self.range.end)
     }
@@ -73,21 +74,21 @@ impl<'a> FileRegistry<'a> {
 
 // todo: we don't want to clone pattern definitions when cloning State
 #[derive(Clone, Debug)]
-pub struct State<'a> {
-    pub bindings: VarRegistry<'a>,
-    pub effects: Vector<Effect<'a>>,
+pub struct State<'a, B: Binding> {
+    pub bindings: VarRegistry<'a, B>,
+    pub effects: Vector<Effect<'a, B>>,
     pub files: FileRegistry<'a>,
     rng: rand::rngs::StdRng,
 }
 
-fn get_top_level_effect_ranges<'a>(
-    effects: &[Effect<'a>],
+fn get_top_level_effect_ranges<'a, B: Binding>(
+    effects: &[Effect<'a, B>],
     memo: &HashMap<CodeRange, Option<String>>,
     range: &CodeRange,
     language: &TargetLanguage,
     logs: &mut AnalysisLogs,
-) -> Result<Vec<EffectRange<'a>>> {
-    let mut effects: Vec<EffectRange> = effects
+) -> Result<Vec<EffectRange<'a, B>>> {
+    let mut effects: Vec<EffectRange<B>> = effects
         .iter()
         .filter(|effect| {
             let binding = &effect.binding;
@@ -115,7 +116,7 @@ fn get_top_level_effect_ranges<'a>(
                 effect: effect.clone(),
             })
         })
-        .collect::<Result<Vec<EffectRange>>>()?;
+        .collect::<Result<Vec<EffectRange<B>>>>()?;
     if !earliest_deadline_sort(&mut effects) {
         bail!("effects have overlapping ranges");
     }
@@ -126,15 +127,15 @@ fn get_top_level_effect_ranges<'a>(
     ))
 }
 
-pub(crate) fn get_top_level_effects<'a>(
-    effects: &[Effect<'a>],
+pub(crate) fn get_top_level_effects<'a, B: Binding>(
+    effects: &[Effect<'a, B>],
     memo: &HashMap<CodeRange, Option<String>>,
     range: &CodeRange,
     language: &TargetLanguage,
     logs: &mut AnalysisLogs,
-) -> Result<Vec<Effect<'a>>> {
+) -> Result<Vec<Effect<'a, B>>> {
     let top_level = get_top_level_effect_ranges(effects, memo, range, language, logs)?;
-    let top_level: Vec<Effect<'a>> = top_level
+    let top_level: Vec<Effect<'a, B>> = top_level
         .into_iter()
         .map(|e| {
             assert!(e.range.start >= range.start);
@@ -157,8 +158,8 @@ impl FilePtr {
     }
 }
 
-impl<'a> State<'a> {
-    pub(crate) fn new(bindings: VarRegistry<'a>, files: Vec<&'a FileOwner>) -> Self {
+impl<'a, B: Binding> State<'a, B> {
+    pub(crate) fn new(bindings: VarRegistry<'a, B>, files: Vec<&'a FileOwner>) -> Self {
         Self {
             rng: rand::rngs::StdRng::seed_from_u64(32),
             bindings,
@@ -181,7 +182,7 @@ impl<'a> State<'a> {
 
     pub(crate) fn reset_vars(&mut self, scope: usize, args: &'a [Option<Pattern>]) {
         let old_scope = self.bindings[scope].last().unwrap();
-        let new_scope: Vector<Box<VariableContent>> = old_scope
+        let new_scope: Vector<Box<VariableContent<B>>> = old_scope
             .iter()
             .enumerate()
             .map(|(index, content)| {
@@ -274,4 +275,4 @@ impl<'a> State<'a> {
     }
 }
 
-type VarRegistry<'a> = Vector<Vector<Vector<Box<VariableContent<'a>>>>>;
+type VarRegistry<'a, B: Binding> = Vector<Vector<Vector<Box<VariableContent<'a, B>>>>>;

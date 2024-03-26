@@ -4,24 +4,24 @@ use super::{
     resolved_pattern::ResolvedPattern,
     state::State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{bail, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::AnalysisLogs;
 
 #[derive(Debug, Clone)]
-pub(crate) struct FuncEvaluation<'a> {
+pub(crate) struct FuncEvaluation<'a, B: Binding> {
     pub predicator: bool,
-    pub ret_val: Option<ResolvedPattern<'a>>,
+    pub ret_val: Option<ResolvedPattern<'a, B>>,
 }
 
 pub(crate) trait Evaluator: Debug {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation>;
+    ) -> Result<FuncEvaluation<B>>;
 }
 
 #[derive(Debug, Clone)]
@@ -31,12 +31,12 @@ pub struct CallFunction {
 }
 
 pub(crate) trait GritCall {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>>;
+    ) -> Result<ResolvedPattern<'a, B>>;
 }
 
 impl CallFunction {
@@ -46,12 +46,12 @@ impl CallFunction {
 }
 
 impl GritCall for CallFunction {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         let function_definition = &context.function_definitions()[self.index];
 
         match function_definition
@@ -83,12 +83,12 @@ impl CallForeignFunction {
 }
 
 impl GritCall for CallForeignFunction {
-    fn call<'a>(
+    fn call<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a>> {
+    ) -> Result<ResolvedPattern<'a, B>> {
         let function_definition = &context.foreign_function_definitions()[self.index];
 
         match function_definition

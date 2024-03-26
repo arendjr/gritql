@@ -8,7 +8,7 @@ use super::{
     variable::VariableSourceLocations,
     State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, bail, Ok, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::{AnalysisLogBuilder, AnalysisLogs};
@@ -76,10 +76,10 @@ impl Name for Not {
 }
 
 impl Matcher for Not {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -148,12 +148,12 @@ impl Name for PrNot {
 }
 
 impl Evaluator for PrNot {
-    fn execute_func<'a>(
+    fn execute_func<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<FuncEvaluation> {
+    ) -> Result<FuncEvaluation<B>> {
         let res = self
             .predicate
             .execute_func(&mut state.clone(), context, logs)?;

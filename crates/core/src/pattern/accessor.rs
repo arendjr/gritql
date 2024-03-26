@@ -7,7 +7,10 @@ use super::{
     state::State,
     variable::{Variable, VariableSourceLocations},
 };
-use crate::{binding::Constant, context::Context};
+use crate::{
+    binding::{Binding, Constant},
+    context::Context,
+};
 use anyhow::{anyhow, bail, Result};
 use marzano_util::analysis_logs::AnalysisLogs;
 use std::{borrow::Cow, collections::BTreeMap};
@@ -92,17 +95,17 @@ impl Accessor {
         Ok(Self::new(map, key))
     }
 
-    fn get_key<'a>(&'a self, state: &State<'a>) -> Result<Cow<'a, str>> {
+    fn get_key<'a, B: Binding>(&'a self, state: &State<'a, B>) -> Result<Cow<'a, str>> {
         match &self.key {
             Key::String(s) => Ok(Cow::Borrowed(s)),
             Key::Variable(v) => v.text(state),
         }
     }
 
-    pub(crate) fn get<'a, 'b>(
+    pub(crate) fn get<'a, 'b, B: Binding>(
         &'a self,
-        state: &'b State<'a>,
-    ) -> Result<Option<PatternOrResolved<'a, 'b>>> {
+        state: &'b State<'a, B>,
+    ) -> Result<Option<PatternOrResolved<'a, 'b, B>>> {
         let key = self.get_key(state)?;
         match &self.map {
             AccessorMap::Container(c) => match c.get_pattern_or_resolved(state)? {
@@ -119,10 +122,10 @@ impl Accessor {
         }
     }
 
-    pub(crate) fn get_mut<'a, 'b>(
+    pub(crate) fn get_mut<'a, 'b, B: Binding>(
         &'a self,
-        state: &'b mut State<'a>,
-    ) -> Result<Option<PatternOrResolvedMut<'a, 'b>>> {
+        state: &'b mut State<'a, B>,
+    ) -> Result<Option<PatternOrResolvedMut<'a, 'b, B>>> {
         let key = self.get_key(state)?;
         match &self.map {
             AccessorMap::Container(c) => match c.get_pattern_or_resolved_mut(state)? {
@@ -139,11 +142,11 @@ impl Accessor {
         }
     }
 
-    pub(crate) fn set_resolved<'a>(
+    pub(crate) fn set_resolved<'a, B: Binding>(
         &'a self,
-        state: &mut State<'a>,
-        value: ResolvedPattern<'a>,
-    ) -> Result<Option<ResolvedPattern<'a>>> {
+        state: &mut State<'a, B>,
+        value: ResolvedPattern<'a, B>,
+    ) -> Result<Option<ResolvedPattern<'a, B>>> {
         match &self.map {
             AccessorMap::Container(c) => {
                 let key = self.get_key(state)?;
@@ -167,10 +170,10 @@ impl Name for Accessor {
 }
 
 impl Matcher for Accessor {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
@@ -190,10 +193,10 @@ impl Matcher for Accessor {
     }
 }
 
-pub(crate) fn execute_resolved_with_binding<'a>(
-    r: &ResolvedPattern<'a>,
-    binding: &ResolvedPattern<'a>,
-    state: &State<'a>,
+pub(crate) fn execute_resolved_with_binding<'a, B: Binding>(
+    r: &ResolvedPattern<'a, B>,
+    binding: &ResolvedPattern<'a, B>,
+    state: &State<'a, B>,
 ) -> Result<bool> {
     if let ResolvedPattern::Binding(r) = r {
         if let ResolvedPattern::Binding(b) = binding {

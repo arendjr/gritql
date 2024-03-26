@@ -5,7 +5,7 @@ use super::{
     variable::VariableSourceLocations,
     Node, State,
 };
-use crate::context::Context;
+use crate::{binding::Binding, context::Context};
 use anyhow::{anyhow, Result};
 use core::fmt::Debug;
 use marzano_util::analysis_logs::AnalysisLogs;
@@ -56,10 +56,10 @@ impl Name for Includes {
 // Includes and within should call the same function taking an iterator as an argument
 // even better two arguments an accumulator and an iterator.
 impl Matcher for Includes {
-    fn execute<'a>(
+    fn execute<'a, B: Binding>(
         &'a self,
-        binding: &ResolvedPattern<'a>,
-        state: &mut State<'a>,
+        binding: &ResolvedPattern<'a, B>,
+        state: &mut State<'a, B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
     ) -> Result<bool> {
