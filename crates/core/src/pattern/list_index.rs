@@ -12,8 +12,10 @@ use crate::binding::{Binding, Constant};
 use crate::context::Context;
 use crate::resolve_opt;
 use anyhow::{anyhow, bail, Result};
-use im::vector;
-use marzano_util::{analysis_logs::AnalysisLogs, tree_sitter_util::named_children_by_field_id};
+use marzano_util::{
+    analysis_logs::AnalysisLogs, node_with_source::NodeWithSource,
+    tree_sitter_util::named_children_by_field_id,
+};
 use std::collections::BTreeMap;
 use tree_sitter::Node;
 
@@ -138,9 +140,9 @@ impl ListIndex {
                         let mut list = named_children_by_field_id(node, &mut cursor, *field);
                         let index = resolve_opt!(to_unsigned(index, len));
                         return Ok(list.nth(index).map(|n| {
-                            PatternOrResolved::ResolvedBinding(ResolvedPattern::Binding(vector![
-                                Binding::Node(src, n)
-                            ]))
+                            PatternOrResolved::ResolvedBinding(ResolvedPattern::from_node(
+                                NodeWithSource::new(n, src),
+                            ))
                         }));
                     }
                     bail!("left side of a listIndex must be a list")
