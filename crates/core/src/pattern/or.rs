@@ -75,7 +75,7 @@ impl Matcher for Or {
             for p in self.patterns.iter() {
                 // filter out pattern which cannot match because of a mismatched node type
                 if let (Some(binding_node), Pattern::ASTNode(node_pattern)) =
-                    (binding_vector.last().and_then(Binding::as_node), p)
+                    (binding_vector.last().and_then(B::as_node), p)
                 {
                     if node_pattern.sort != binding_node.node.kind_id() {
                         continue;

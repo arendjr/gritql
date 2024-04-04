@@ -1,23 +1,22 @@
+use grit_util::AstNode;
 use itertools::{EitherOrBoth, Itertools};
 use marzano_language::language::Language;
-use tree_sitter::{Node, Range};
+use marzano_util::node_with_source::NodeWithSource;
+use tree_sitter::Range;
 
 pub(crate) fn is_suppress_comment(
-    comment_node: &Node,
-    src: &str,
+    comment_node: &NodeWithSource,
     target_range: &Range,
     current_name: Option<&str>,
     lang: &impl Language,
 ) -> bool {
-    let child_range = comment_node.range();
-    let Ok(text) = comment_node.utf8_text(src.as_bytes()) else {
-        return false;
-    };
+    let child_range = comment_node.node.range();
+    let text = comment_node.text();
     let inline_suppress = child_range.end_point().row() >= target_range.start_point().row()
         && child_range.end_point().row() <= target_range.end_point().row();
     if !inline_suppress {
-        let pre_suppress = comment_applies_to_range(comment_node, target_range, lang, src)
-            && comment_occupies_entire_line(text.as_ref(), &comment_node.range(), src);
+        let pre_suppress = comment_applies_to_range(comment_node, target_range, lang)
+            && comment_occupies_entire_line(text, comment_node);
         if !pre_suppress {
             return false;
         }
@@ -51,32 +50,34 @@ pub(crate) fn is_suppress_comment(
 }
 
 fn comment_applies_to_range(
-    comment_node: &Node,
+    comment_node: &NodeWithSource,
     range: &Range,
     lang: &impl Language,
-    src: &str,
 ) -> bool {
     let Some(mut applicable) = comment_node.next_named_sibling() else {
         return false;
     };
     while let Some(next) = applicable.next_named_sibling() {
-        if !lang.is_comment(applicable.kind_id())
-            && !lang.is_comment_wrapper(&applicable)
+        if !lang.is_comment(applicable.node.kind_id())
+            && !lang.is_comment_wrapper(&applicable.node)
             // Some languages have significant whitespace; continue until we find a non-whitespace non-comment node
-            && !applicable.utf8_text(src.as_bytes()).map_or(true, |text| text.trim().is_empty())
+            && !applicable.text().trim().is_empty()
         {
             break;
         }
         applicable = next;
     }
-    let applicable_range = applicable.range();
+    let applicable_range = applicable.node.range();
     applicable_range.start_point().row() == range.start_point().row()
 }
 
-fn comment_occupies_entire_line(text: &str, range: &Range, src: &str) -> bool {
-    src.lines()
-        .skip(range.start_point().row() as usize)
-        .take((range.end_point().row() - range.start_point().row() + 1) as usize)
+fn comment_occupies_entire_line(text: &str, node: &NodeWithSource) -> bool {
+    let start_row = node.node.start_position().row() as usize;
+    let end_row = node.node.end_position().row() as usize;
+    node.source
+        .lines()
+        .skip(start_row)
+        .take(end_row - start_row + 1)
         .zip_longest(text.split('\n'))
         .all(|zipped| {
             if let EitherOrBoth::Both(src_line, text_line) = zipped {

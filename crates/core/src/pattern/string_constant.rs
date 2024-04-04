@@ -92,7 +92,7 @@ impl Matcher for AstLeafNode {
         let ResolvedPattern::Binding(b) = binding else {
             return Ok(false);
         };
-        let Some(node) = b.last().and_then(Binding::singleton) else {
+        let Some(node) = b.last().and_then(B::singleton) else {
             return Ok(false);
         };
         if let Some(e) = &self.equivalence_class {

@@ -7,6 +7,7 @@ use crate::smart_insert::calculate_padding;
 use crate::suppress::is_suppress_comment;
 use anyhow::{anyhow, Result};
 use grit_util::AstNode;
+use itertools::Itertools;
 use marzano_language::language::{FieldId, Language};
 use marzano_language::target_language::TargetLanguage;
 use marzano_util::analysis_logs::{AnalysisLogBuilder, AnalysisLogs};
@@ -86,6 +87,9 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     /// filename binding.
     fn as_filename(&self) -> Option<&Path>;
 
+    /// Returns the node of this binding, if and only if it is a node binding.
+    fn as_node(&self) -> Option<impl AstNode>;
+
     /// Returns whether the binding is empty.
     fn is_empty(&self) -> bool;
 
@@ -95,10 +99,18 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     /// same thing.
     fn is_equivalent_to(&self, other: &Self) -> bool;
 
+    /// Returns `true` if and only if this binding is bound to a list.
+    fn is_list(&self) -> bool;
+
+    /// Returns an iterator over the items in a list.
+    ///
+    /// Returns `None` if the binding is not bound to a list.
+    fn list_items(&self) -> Option<impl Iterator<Item = impl AstNode> + Clone>;
+
     fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool;
 
     /// Logs an error about this binding if the given range is empty.
-    fn log_empty_field_rewrite_error<T>(
+    fn log_empty_field_rewrite_error(
         &self,
         // FIXME: This introduces a dependency on TreeSitter.
         language: &TargetLanguage,
@@ -115,6 +127,14 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
 
     /// Returns the parent node of the binding.
     fn parent_node(&self) -> Option<impl AstNode>;
+
+    /// Returns the only node bound by this binding.
+    ///
+    /// This includes list bindings that only match a single child.
+    ///
+    /// Returns `None` if the binding has no associated node, or if there is
+    /// more than one associated node.
+    fn singleton(&self) -> Option<impl AstNode>;
 }
 
 #[derive(Debug, Clone)]
@@ -246,6 +266,14 @@ impl<'a> Binding for MarzanoBinding<'a> {
         }
     }
 
+    fn as_node(&self) -> Option<NodeWithSource<'a>> {
+        if let Self::Node(source, node) = self {
+            Some(NodeWithSource::new(node.clone(), source))
+        } else {
+            None
+        }
+    }
+
     fn is_empty(&self) -> bool {
         matches!(self, Self::Empty(_, _, _))
     }
@@ -310,6 +338,75 @@ impl<'a> Binding for MarzanoBinding<'a> {
         }
     }
 
+    fn is_list(&self) -> bool {
+        matches!(self, Self::List(..))
+    }
+
+    fn list_items(&self) -> Option<impl Iterator<Item = NodeWithSource<'a>> + Clone> {
+        match self {
+            Self::List(src, node, field_id) => {
+                let field_id = *field_id;
+                let mut cursor = node.walk();
+                cursor.goto_first_child();
+                let mut done = false;
+                Some(
+                    iter::from_fn(move || {
+                        // seems to me that the external loop is unnecessary, but was
+                        // getting an infinite loop without it.
+                        #[allow(clippy::never_loop)]
+                        while !done {
+                            while cursor.field_id() != Some(field_id) {
+                                if !cursor.goto_next_sibling() {
+                                    return None;
+                                }
+                            }
+                            let result = cursor.node();
+                            if !cursor.goto_next_sibling() {
+                                done = true;
+                            }
+                            return Some(result);
+                        }
+                        None
+                    })
+                    .filter(|child| child.is_named())
+                    .map(|named_child| NodeWithSource::new(named_child, src)),
+                )
+            }
+            Self::Empty(..)
+            | Self::Node(..)
+            | Self::String(..)
+            | Self::ConstantRef(..)
+            | Self::FileName(..) => None,
+        }
+    }
+
+    fn log_empty_field_rewrite_error(
+        &self,
+        language: &TargetLanguage,
+        logs: &mut AnalysisLogs,
+    ) -> Result<()> {
+        match self {
+            Self::Empty(src, node, field) | Self::List(src, node, field) => {
+                let range: Range = node.range().into();
+                let log = AnalysisLogBuilder::default()
+                        .level(441_u16)
+                        .source(*src)
+                        .position(range.start)
+                        .range(range)
+                        .message(format!(
+                            "Error: failed to rewrite binding, cannot derive range of empty field {} of node {}",
+                            language.get_ts_language().field_name_for_id(*field).unwrap(),
+                            node.kind()
+                        ))
+                        .build()?;
+                logs.push(log);
+            }
+            Self::String(_, _) | Self::FileName(_) | Self::Node(_, _) | Self::ConstantRef(_) => {}
+        }
+
+        Ok(())
+    }
+
     fn get_insertion_padding(
         &self,
         text: &str,
@@ -355,32 +452,54 @@ impl<'a> Binding for MarzanoBinding<'a> {
     }
 
     fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool {
-        let (src, node) = match self {
+        let node = match self {
             Self::Node(src, node) | Self::List(src, node, _) | Self::Empty(src, node, _) => {
-                (src, node)
+                NodeWithSource::new(node.clone(), src)
             }
             Self::String(_, _) | Self::FileName(_) | Self::ConstantRef(_) => return false,
         };
-        let target_range = node.range();
-        for n in
-            node.children(&mut node.walk())
-                .chain(ParentTraverse::new(TreeSitterParentCursor::new(
-                    node.clone(),
-                )))
-        {
-            let mut cursor = n.walk();
-            let children = n.children(&mut cursor);
-            for c in children {
-                if !(lang.is_comment(c.kind_id()) || lang.is_comment_wrapper(&c)) {
+        let target_range = node.node.range();
+        for n in node.children().chain(node.ancestors()) {
+            for c in n.children() {
+                if !(lang.is_comment(c.node.kind_id()) || lang.is_comment_wrapper(&c.node)) {
                     continue;
                 }
-                if is_suppress_comment(&c, src, &target_range, current_name, lang) {
+                if is_suppress_comment(&node, &target_range, current_name, lang) {
                     return true;
                 }
             }
         }
 
         false
+    }
+
+    fn parent_node(&self) -> Option<NodeWithSource<'a>> {
+        match self {
+            Self::Node(src, node) => node.parent().map(|parent| NodeWithSource::new(parent, src)),
+            Self::List(src, node, _) => Some(NodeWithSource::new(node.clone(), src)),
+            Self::Empty(src, node, _) => Some(NodeWithSource::new(node.clone(), src)),
+            Self::String(..) | Self::FileName(..) | Self::ConstantRef(..) => None,
+        }
+    }
+
+    fn singleton(&self) -> Option<NodeWithSource<'a>> {
+        match self {
+            Self::Node(src, node) => Some(NodeWithSource::new(node.clone(), src)),
+            Self::List(src, parent_node, field_id) => {
+                let mut cursor = parent_node.walk();
+                let mut children = parent_node.children_by_field_id(*field_id, &mut cursor);
+                if let Some(node) = children.next() {
+                    if children.next().is_none() {
+                        Some(NodeWithSource::new(node.clone(), src))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            Self::String(..) | Self::FileName(..) | Self::Empty(..) | Self::ConstantRef(..) => None,
+        }
     }
 }
 
@@ -630,32 +749,6 @@ impl<'a> MarzanoBinding<'a> {
         Self::String(source, range)
     }
 
-    /// Returns the only node bound by this binding.
-    ///
-    /// This includes list bindings that only match a single child.
-    ///
-    /// Returns `None` if the binding has no associated node, or if there is
-    /// more than one associated node.
-    pub(crate) fn singleton(&self) -> Option<NodeWithSource<'a>> {
-        match self {
-            Self::Node(src, node) => Some(NodeWithSource::new(node.clone(), src)),
-            Self::List(src, parent_node, field_id) => {
-                let mut cursor = parent_node.walk();
-                let mut children = parent_node.children_by_field_id(*field_id, &mut cursor);
-                if let Some(node) = children.next() {
-                    if children.next().is_none() {
-                        Some(NodeWithSource::new(node.clone(), src))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            Self::String(..) | Self::FileName(..) | Self::Empty(..) | Self::ConstantRef(..) => None,
-        }
-    }
-
     pub fn get_sexp(&self) -> Option<String> {
         match self {
             Self::Node(_, node) => Some(node.to_sexp().to_string()),
@@ -830,73 +923,6 @@ impl<'a> MarzanoBinding<'a> {
         }
     }
 
-    /// Returns the node of this binding, if and only if it is a node binding.
-    pub(crate) fn as_node(&self) -> Option<NodeWithSource<'a>> {
-        if let Self::Node(source, node) = self {
-            Some(NodeWithSource::new(node.clone(), source))
-        } else {
-            None
-        }
-    }
-
-    /// Returns `true` if and only if this binding is bound to a list.
-    pub(crate) fn is_list(&self) -> bool {
-        matches!(self, Self::List(..))
-    }
-
-    /// Returns an iterator over the items in a list.
-    ///
-    /// Returns `None` if the binding is not bound to a list.
-    pub(crate) fn list_items(&self) -> Option<impl Iterator<Item = NodeWithSource<'a>> + Clone> {
-        match self {
-            Self::List(src, node, field_id) => {
-                let field_id = *field_id;
-                let mut cursor = node.walk();
-                cursor.goto_first_child();
-                let mut done = false;
-                Some(
-                    iter::from_fn(move || {
-                        // seems to me that the external loop is unnecessary, but was
-                        // getting an infinite loop without it.
-                        #[allow(clippy::never_loop)]
-                        while !done {
-                            while cursor.field_id() != Some(field_id) {
-                                if !cursor.goto_next_sibling() {
-                                    return None;
-                                }
-                            }
-                            let result = cursor.node();
-                            if !cursor.goto_next_sibling() {
-                                done = true;
-                            }
-                            return Some(result);
-                        }
-                        None
-                    })
-                    .filter(|child| child.is_named())
-                    .map(|named_child| NodeWithSource::new(named_child, src)),
-                )
-            }
-            Self::Empty(..)
-            | Self::Node(..)
-            | Self::String(..)
-            | Self::ConstantRef(..)
-            | Self::FileName(..) => None,
-        }
-    }
-
-    /// Returns the parent node of this binding.
-    ///
-    /// Returns `None` if the binding has no relation to a node.
-    pub(crate) fn parent_node(&self) -> Option<NodeWithSource<'a>> {
-        match self {
-            Self::Node(src, node) => node.parent().map(|parent| NodeWithSource::new(parent, src)),
-            Self::List(src, node, _) => Some(NodeWithSource::new(node.clone(), src)),
-            Self::Empty(src, node, _) => Some(NodeWithSource::new(node.clone(), src)),
-            Self::String(..) | Self::FileName(..) | Self::ConstantRef(..) => None,
-        }
-    }
-
     pub fn is_truthy(&self) -> bool {
         match self {
             Self::Empty(..) => false,
@@ -910,32 +936,5 @@ impl<'a> MarzanoBinding<'a> {
             Self::FileName(_) => true,
             Self::ConstantRef(c) => c.is_truthy(),
         }
-    }
-
-    pub(crate) fn log_empty_field_rewrite_error(
-        &self,
-        language: &TargetLanguage,
-        logs: &mut AnalysisLogs,
-    ) -> Result<()> {
-        match self {
-            Self::Empty(src, node, field) | Self::List(src, node, field) => {
-                let range: Range = node.range().into();
-                let log = AnalysisLogBuilder::default()
-                        .level(441_u16)
-                        .source(*src)
-                        .position(range.start)
-                        .range(range)
-                        .message(format!(
-                            "Error: failed to rewrite binding, cannot derive range of empty field {} of node {}",
-                            language.get_ts_language().field_name_for_id(*field).unwrap(),
-                            node.kind()
-                        ))
-                        .build()?;
-                logs.push(log);
-            }
-            Self::String(_, _) | Self::FileName(_) | Self::Node(_, _) | Self::ConstantRef(_) => {}
-        }
-
-        Ok(())
     }
 }
