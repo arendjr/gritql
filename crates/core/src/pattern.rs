@@ -75,7 +75,6 @@ use self::{
     predicate_definition::PredicateDefinition,
     resolved_pattern::{File, ResolvedPattern},
     state::{FilePtr, State},
-    variable::register_variable,
     variable_content::VariableContent,
 };
 use crate::{binding::Binding, context::Context};

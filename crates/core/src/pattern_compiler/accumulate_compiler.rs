@@ -1,12 +1,13 @@
-use super::{compiler::CompilationContext, node_compiler::NodeCompiler};
+use super::{
+    compiler::NodeCompilationContext, node_compiler::NodeCompiler,
+    pattern_compiler::PatternCompiler,
+};
 use crate::pattern::{
     accumulate::Accumulate, code_snippet::CodeSnippet, dynamic_snippet::DynamicPattern,
-    patterns::Pattern, variable::VariableSourceLocations,
+    patterns::Pattern,
 };
 use anyhow::{anyhow, Result};
-use marzano_util::analysis_logs::AnalysisLogs;
-use std::collections::BTreeMap;
-use tree_sitter::Node;
+use marzano_util::node_with_source::NodeWithSource;
 
 pub(crate) struct AccumulateCompiler;
 
@@ -14,40 +15,17 @@ impl NodeCompiler for AccumulateCompiler {
     type TargetPattern = Accumulate;
 
     fn from_node(
-        node: &Node,
-        context: &CompilationContext,
-        vars: &mut BTreeMap<String, usize>,
-        vars_array: &mut Vec<Vec<VariableSourceLocations>>,
-        scope_index: usize,
-        global_vars: &mut BTreeMap<String, usize>,
-        logs: &mut AnalysisLogs,
+        node: NodeWithSource,
+        context: &mut NodeCompilationContext,
     ) -> Result<Self::TargetPattern> {
         let left_node = node
             .child_by_field_name("left")
             .ok_or_else(|| anyhow!("missing variable of patternAccumulateString"))?;
-        let left = Pattern::from_node(
-            &left_node,
-            context,
-            vars,
-            vars_array,
-            scope_index,
-            global_vars,
-            false,
-            logs,
-        )?;
+        let left = PatternCompiler::from_node(left_node, context)?;
         let right_node = node
             .child_by_field_name("right")
             .ok_or_else(|| anyhow!("missing pattern of patternAccumulateString"))?;
-        let right = Pattern::from_node(
-            &right_node,
-            context,
-            vars,
-            vars_array,
-            scope_index,
-            global_vars,
-            true,
-            logs,
-        )?;
+        let right = PatternCompiler::from_node(right_node, &mut context.with_rhs(true))?;
         let dynamic_right = match right.clone() {
             Pattern::Dynamic(r) => Some(r),
             Pattern::CodeSnippet(CodeSnippet {

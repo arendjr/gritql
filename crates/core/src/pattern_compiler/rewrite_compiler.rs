@@ -1,12 +1,13 @@
-use super::{compiler::CompilationContext, node_compiler::NodeCompiler};
+use super::{
+    compiler::NodeCompilationContext, node_compiler::NodeCompiler,
+    pattern_compiler::PatternCompiler,
+};
 use crate::pattern::{
-    code_snippet::CodeSnippet, dynamic_snippet::DynamicPattern, patterns::Pattern,
-    rewrite::Rewrite, variable::VariableSourceLocations,
+    code_snippet::CodeSnippet, dynamic_snippet::DynamicPattern, patterns::Pattern, rewrite::Rewrite,
 };
 use anyhow::{anyhow, Result};
-use marzano_util::analysis_logs::{AnalysisLogBuilder, AnalysisLogs};
-use std::collections::BTreeMap;
-use tree_sitter::Node;
+use grit_util::AstNode;
+use marzano_util::{analysis_logs::AnalysisLogBuilder, node_with_source::NodeWithSource};
 
 pub(crate) struct RewriteCompiler;
 
@@ -15,14 +16,10 @@ impl NodeCompiler for RewriteCompiler {
 
     // do we want to add support for annotations?
     fn from_node(
-        node: &Node,
-        context: &CompilationContext,
-        vars: &mut BTreeMap<String, usize>,
-        vars_array: &mut Vec<Vec<VariableSourceLocations>>,
-        scope_index: usize,
-        global_vars: &mut BTreeMap<String, usize>,
-        logs: &mut AnalysisLogs,
+        node: NodeWithSource,
+        context: &mut NodeCompilationContext,
     ) -> Result<Self::TargetPattern> {
+        let mut context = context.with_rhs(false);
         let left = node
             .child_by_field_name("left")
             .ok_or_else(|| anyhow!("missing lhs of rewrite"))?;
@@ -30,26 +27,8 @@ impl NodeCompiler for RewriteCompiler {
             .child_by_field_name("right")
             .ok_or_else(|| anyhow!("missing rhs of rewrite"))?;
         let annotation = node.child_by_field_name("annotation");
-        let left = Pattern::from_node(
-            &left,
-            context,
-            vars,
-            vars_array,
-            scope_index,
-            global_vars,
-            false,
-            logs,
-        )?;
-        let right = Pattern::from_node(
-            &right,
-            context,
-            vars,
-            vars_array,
-            scope_index,
-            global_vars,
-            true,
-            logs,
-        )?;
+        let left = PatternCompiler::from_node(left, &mut context)?;
+        let right = PatternCompiler::from_node(right, &mut context)?;
 
         match (&left, &right) {
             (
@@ -65,14 +44,14 @@ impl NodeCompiler for RewriteCompiler {
                 let log = AnalysisLogBuilder::default()
                 .level(441_u16)
                 .file(context.file)
-                .source(context.src)
-                .position(node.start_position())
+                .source(node.source)
+                .position(node.node.start_position())
                 .range(node.range())
                 .message(
                     format!("Warning: This is rewriting `{}` into the identical string `{}`, will have no effect.", left_source, right_source)
                 )
                 .build()?;
-                logs.push(log);
+                context.logs.push(log);
             }
             (_, _) => {}
         }
@@ -139,12 +118,7 @@ impl NodeCompiler for RewriteCompiler {
             ))?,
         };
 
-        let annotation = annotation.map(|n| {
-            n.utf8_text(context.src.as_bytes())
-                .unwrap()
-                .trim()
-                .to_string()
-        });
+        let annotation = annotation.map(|n| n.text().trim().to_string());
         Ok(Rewrite::new(left, right, annotation))
     }
 }

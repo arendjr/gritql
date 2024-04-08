@@ -10,13 +10,13 @@ use marzano_util::position::UtilRange;
 use tree_sitter::Node;
 
 #[derive(Debug, Clone)]
-struct Point {
+pub struct Point {
     line: u32,
     column: Option<u32>,
 }
 
 impl Point {
-    fn new(line: Option<u32>, column: Option<u32>) -> Result<Option<Self>> {
+    pub fn new(line: Option<u32>, column: Option<u32>) -> Result<Option<Self>> {
         if let Some(line) = line {
             Ok(Some(Self { line, column }))
         } else {
@@ -33,8 +33,8 @@ impl Point {
 
 #[derive(Debug, Clone)]
 pub struct Range {
-    start: Option<Point>,
-    end: Option<Point>,
+    pub start: Option<Point>,
+    pub end: Option<Point>,
 }
 
 fn node_to_int(node: &Node, field: &str, src: &str) -> Result<Option<u32>> {
