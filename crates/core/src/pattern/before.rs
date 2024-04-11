@@ -1,54 +1,26 @@
 use super::{
-    compiler::CompilationContext,
     patterns::{Matcher, Name, Pattern},
     resolved_pattern::{pattern_to_binding, ResolvedPattern},
-    variable::VariableSourceLocations,
-    Node, State,
+    State,
 };
 use crate::{
     binding::{Binding, Constant},
+    context::Context,
     errors::debug,
+    resolve,
 };
-use crate::{context::Context, resolve};
-use anyhow::{anyhow, bail, Result};
-use core::fmt::Debug;
+use anyhow::{bail, Result};
 use grit_util::AstNode;
 use marzano_util::analysis_logs::AnalysisLogs;
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct Before {
-    pub(crate) before: Pattern,
+    pub before: Pattern,
 }
 
 impl Before {
     pub fn new(before: Pattern) -> Self {
         Self { before }
-    }
-
-    pub(crate) fn from_node(
-        node: &Node,
-        context: &CompilationContext,
-        vars: &mut BTreeMap<String, usize>,
-        vars_array: &mut Vec<Vec<VariableSourceLocations>>,
-        scope_index: usize,
-        global_vars: &mut BTreeMap<String, usize>,
-        logs: &mut AnalysisLogs,
-    ) -> Result<Self> {
-        let pattern = node
-            .child_by_field_name("pattern")
-            .ok_or_else(|| anyhow!("missing pattern of patternBefore"))?;
-        let pattern = Pattern::from_node(
-            &pattern,
-            context,
-            vars,
-            vars_array,
-            scope_index,
-            global_vars,
-            false,
-            logs,
-        )?;
-        Ok(Self::new(pattern))
     }
 
     pub(crate) fn prev_pattern<'a, B: Binding>(
@@ -62,7 +34,7 @@ impl Before {
             bail!("cannot get the node before this binding")
         };
 
-        if let Some(prev) = node.previous_named_sibling() {
+        if let Some(prev) = node.previous_named_node() {
             Ok(ResolvedPattern::from_node(prev))
         } else {
             debug(
@@ -103,7 +75,7 @@ impl Matcher for Before {
         let Some(node) = binding.as_node() else {
             return Ok(true);
         };
-        let next_node = resolve!(node.next_named_sibling());
+        let next_node = resolve!(node.next_named_node());
         if !self.before.execute(
             &ResolvedPattern::from_node(next_node),
             &mut cur_state,

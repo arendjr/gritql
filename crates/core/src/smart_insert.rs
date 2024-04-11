@@ -1,21 +1,24 @@
 use marzano_language::target_language::TargetLanguage;
-use tree_sitter::Node;
+use marzano_util::node_with_source::NodeWithSource;
 
 pub(crate) fn calculate_padding(
-    src: &str,
-    children: &[Node],
+    children: &[NodeWithSource],
     insert: &str,
     is_first: bool,
     language: &TargetLanguage,
 ) -> Option<String> {
-    let named_children: Vec<_> = children.iter().filter(|child| child.is_named()).collect();
+    let named_children: Vec<_> = children
+        .iter()
+        .filter(|child| child.node.is_named())
+        .collect();
     let mut separator: Option<String> = None;
 
     if named_children.len() == 1 {
         let last_named = named_children.last().unwrap();
         let last_child = children.last().unwrap();
-        let trailing =
-            src[last_named.end_byte() as usize..last_child.end_byte() as usize].to_string();
+        let trailing = last_child.source
+            [last_named.node.end_byte() as usize..last_child.node.end_byte() as usize]
+            .to_string();
         separator = if !trailing.is_empty() {
             Some(trailing)
         } else {
@@ -25,11 +28,12 @@ pub(crate) fn calculate_padding(
         for i in 0..named_children.len() - 1 {
             let child = named_children.get(i).unwrap();
             let next_child = named_children.get(i + 1).unwrap();
-            let range_between = child.end_byte()..next_child.start_byte();
+            let range_between = child.node.end_byte()..next_child.node.start_byte();
             if range_between.start == range_between.end {
                 return None;
             }
-            let curr = src[range_between.start as usize..range_between.end as usize].to_string();
+            let curr =
+                child.source[range_between.start as usize..range_between.end as usize].to_string();
             if let Some(ref sep) = separator {
                 if curr == *sep || curr.contains(sep) {
                     continue;
@@ -49,7 +53,9 @@ pub(crate) fn calculate_padding(
     let separator = separator.unwrap();
     let last_named = named_children.last().unwrap();
     let last_child = children.last().unwrap();
-    let trailing = src[last_named.end_byte() as usize..last_child.end_byte() as usize].to_string();
+    let trailing = last_child.source
+        [last_named.node.end_byte() as usize..last_child.node.end_byte() as usize]
+        .to_string();
     let separator = if is_first {
         adjust_separator_start(&separator, &trailing)
     } else {

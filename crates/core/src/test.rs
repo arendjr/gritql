@@ -1,4 +1,6 @@
+use crate::pattern_compiler::src_to_problem_libs;
 use anyhow::{anyhow, Context, Result};
+use api::MatchResult;
 use insta::{assert_debug_snapshot, assert_snapshot, assert_yaml_snapshot};
 use lazy_static::lazy_static;
 use marzano_auth::testing::get_testing_auth_info;
@@ -7,9 +9,7 @@ use marzano_language::target_language::{PatternLanguage, TargetLanguage};
 use marzano_util::position::{Range, VariableMatch};
 use marzano_util::rich_path::RichFile;
 use marzano_util::runtime::{ExecutionContext, LanguageModelAPI};
-use pattern::api::MatchResult;
-use pattern::compiler::src_to_problem_libs;
-use pattern::Problem;
+use problem::Problem;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap};
 use std::{env, path::Path, path::PathBuf};
@@ -3058,6 +3058,110 @@ fn hcl_implicit_regex() {
                 |    required_version = "~> v1.5.0"
                 |  }
                 |}
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn includes_or() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r#"
+                |language js
+                |
+                |`console.log($_)` as $haystack where {
+                |   $haystack <: includes or { "world", "handsome" }
+                |} => `console.log("Goodbye world!")`
+                |"#
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |console.log("Hello world!");
+                |console.log("Hello handsome!");
+                |console.log("But not me, sadly.");
+                |console.log("Hi, Hello world!");
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |console.log("Goodbye world!");
+                |console.log("Goodbye world!");
+                |console.log("But not me, sadly.");
+                |console.log("Goodbye world!");
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn includes_and() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r#"
+                |language js
+                |
+                |`console.log($_)` as $haystack where {
+                |   $haystack <: includes and { "Hello", "handsome" }
+                |} => `console.log("Goodbye world!")`
+                |"#
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |console.log("Hello world!");
+                |console.log("Hello handsome!");
+                |console.log("But not me, handsome.");
+                |console.log("Hi, Hello world!");
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |console.log("Hello world!");
+                |console.log("Goodbye world!");
+                |console.log("But not me, handsome.");
+                |console.log("Hi, Hello world!");
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn includes_any() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r#"
+                |language js
+                |
+                |`console.log($_)` as $haystack where {
+                |   $haystack <: includes any { "Hello", "handsome" }
+                |} => `console.log("Goodbye world!")`
+                |"#
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |console.log("Hello world!");
+                |console.log("Hello handsome!");
+                |console.log("But not me, handsome.");
+                |console.log("Hi, Hello world!");
+                |console.log("Just not this....");
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |console.log("Goodbye world!");
+                |console.log("Goodbye world!");
+                |console.log("Goodbye world!");
+                |console.log("Goodbye world!");
+                |console.log("Just not this....");
                 |"#
             .trim_margin()
             .unwrap(),
@@ -8399,6 +8503,105 @@ fn code_span() {
 }
 
 #[test]
+fn markdown_heading_rewrite() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: "
+                language markdown(block)
+
+                atx_heading($heading_content, $level) where {
+                    $level <: or {
+                        \"##\",
+                        atx_h4_marker()
+                    }
+                } => `HEADING: $heading_content\n`
+                "
+            .to_owned(),
+            source: r#"
+                |# File with two secionds
+                |Some content
+                |## subheading
+                |More content
+                |## Subheading two
+                |Even more content
+                |### Subheading three
+                |Even more content
+                |#### Subheading four
+                |Even more content
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |# File with two secionds
+                |Some content
+                |HEADING:  subheading
+                |More content
+                |HEADING:  Subheading two
+                |Even more content
+                |### Subheading three
+                |Even more content
+                |HEADING:  Subheading four
+                |Even more content
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn markdown_sections() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: "
+                language markdown(block)
+
+                section($heading, $content) where {
+                    $heading <: atx_heading(level=atx_h2_marker()),
+                    $content <: not includes \"skip\"
+                } => raw`---
+                SECTION 2 HEADER: $heading`
+                "
+            .to_owned(),
+            source: r#"
+                |# File with two secionds
+                |Some content
+                |## level 2
+                |More content
+                |## level 2 (do not skip)
+                |Even more content
+                |### level 3
+                |Even more content
+                |#### level 4
+                |Even more content
+                |## Now we go back to section two
+                |Content only here
+                |## Skip this one...
+                |skip me
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |# File with two secionds
+                |Some content
+                |---
+                |                SECTION 2 HEADER: ## level 2
+                |---
+                |                SECTION 2 HEADER: ## level 2 (do not skip)
+                |---
+                |                SECTION 2 HEADER: ## Now we go back to section two
+                |## Skip this one...
+                |skip me
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
 fn parses_java_constructor() {
     run_test_expected({
         TestArgExpected {
@@ -11615,7 +11818,7 @@ fn yaml_list_indentation() {
                 |        $items <: some bubble($new_task) $_ where {
                 |                $new_task += `foo: other`,
                 |            },
-                |        $bar = join(list=$new_task, separator=`\n  `),
+                |        $bar = join(list=$new_task, separator=`\n `),
                 |        $subtasks += `- $bar`
                 |    },
                 |    $foo = join(list=$subtasks, separator=`\n\n`),
@@ -13385,7 +13588,7 @@ or {
     } else {
         $import_clause => .
     }
-  } 
+  }
 }
 
 remove_unused_imports()"#
@@ -13402,6 +13605,160 @@ remove_unused_imports()"#
         |"#
         .trim_margin()
         .unwrap(),
+    })
+    .unwrap();
+}
+
+#[test]
+#[ignore = "this test will be fixed in a followup pr"]
+fn yaml_list_add_indentation() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r"
+                |engine marzano(0.1)
+                |language yaml
+                |
+                |`- $task` where {
+                |    $task <: block_mapping($items),
+                |    $subtasks = [],
+                |    $items <: some block_mapping_pair(key=contains `across`, $value),
+                |    $value <: contains `values: $values`,
+                |    $values <: some bubble($items, $subtasks) `- $val` where {
+                |        $new_task = [],
+                |        $items <: some bubble($new_task) $_ where {
+                |                $new_task += `foo: other`,
+                |            },
+                |        $bar = join(list=$new_task, separator=`\n `),
+                |        $subtasks += `- $bar`
+                |    },
+                |    $foo = join(list=$subtasks, separator=`\n\n`),
+                |    $task => `in_parallel:
+                |  nested:
+                |    $foo`
+                |}
+                |
+                |"
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |  - across:
+                |    - var: name
+                |      values:
+                |      - file1
+                |      - file2
+                |      - file3
+                |    task: create-file
+                |    config:
+                |      platform: linux
+                |      image_resource:
+                |        type: registry-image
+                |        source: {repository: busybox}
+                |      run:
+                |        path: touch
+                |        args:
+                |        - manifests/((.:name))
+                |      outputs:
+                |      - name: manifests
+                |    file: input.yaml
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |  - in_parallel:
+                |      nested:
+                |        - foo: other
+                |          foo: other
+                |          foo: other
+                |          foo: other
+                |
+                |        - foo: other
+                |          foo: other
+                |          foo: other
+                |          foo: other
+                |
+                |        - foo: other
+                |          foo: other
+                |          foo: other
+                |          foo: other
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn yaml_indents() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r"
+                |engine marzano(0.1)
+                |language yaml
+                |
+                |`- $foo` where {
+                |    $joined = `foo: bar
+                |baz: qux`,
+                |    $foo => `baz:
+                |  $joined`
+                |}
+                |"
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |  - across:
+                |    - var: name
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |  - baz:
+                |      foo: bar
+                |      baz: qux
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
+    })
+    .unwrap();
+}
+
+#[test]
+fn yaml_indents_join() {
+    run_test_expected({
+        TestArgExpected {
+            pattern: r#"
+                |engine marzano(0.1)
+                |language yaml
+                |
+                |`- $foo` where {
+                |    $list = ["a", "b", "c"],
+                |    $accumulator = [],
+                |    $list <: some bubble($accumulator) {
+                |        $accumulator += `foo: bar`
+                |    },
+                |    $joined = join(list=$accumulator, separator=`\n`),
+                |    $foo => `baz:
+                |  $joined`
+                |}
+                |"#
+            .trim_margin()
+            .unwrap(),
+            source: r#"
+                |  - across:
+                |    - var: name
+                |"#
+            .trim_margin()
+            .unwrap(),
+            expected: r#"
+                |  - baz:
+                |      foo: bar
+                |      foo: bar
+                |      foo: bar
+                |"#
+            .trim_margin()
+            .unwrap(),
+        }
     })
     .unwrap();
 }

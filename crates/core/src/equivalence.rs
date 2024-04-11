@@ -1,4 +1,6 @@
-use tree_sitter::Node;
+use grit_util::AstNode;
+use itertools::{EitherOrBoth, Itertools};
+use marzano_util::node_with_source::NodeWithSource;
 
 /// Checks whether two nodes are equivalent.
 ///
@@ -13,13 +15,11 @@ use tree_sitter::Node;
 /// Potential improvements:
 /// 1. Use cursors that are passed as arguments -- not clear if this would be faster.
 /// 2. Precompute hashes on all nodes, which define the equivalence relation. The check then becomes O(1).
-pub fn are_equivalent(source1: &str, node1: &Node, source2: &str, node2: &Node) -> bool {
+pub fn are_equivalent(node1: &NodeWithSource, node2: &NodeWithSource) -> bool {
     // If the source is identical, we consider the nodes equivalent.
     // This covers most cases of constant nodes.
     // We may want a more precise check here eventually, but this is a good start.
-    if source1[node1.start_byte() as usize..node1.end_byte() as usize]
-        == source2[node2.start_byte() as usize..node2.end_byte() as usize]
-    {
+    if node1.text() == node2.text() {
         return true;
     }
 
@@ -30,35 +30,31 @@ pub fn are_equivalent(source1: &str, node1: &Node, source2: &str, node2: &Node) 
     // currently fixed by moving this check to after string matching, but
     // still not enough consider that a given snippet could be any one
     // of several nested nodes.
-    if node1.kind_id() != node2.kind_id() {
+    if node1.node.kind_id() != node2.node.kind_id() {
         return false;
     }
 
     // If the node kinds are the same, then we need to check the named fields.
-    let mut cursor1 = node1.walk();
-    let mut cursor2 = node2.walk();
-    let named_fields1 = node1.named_children(&mut cursor1);
-    let named_fields2 = node2.named_children(&mut cursor2);
+    let named_fields1 = node1.named_children();
+    let named_fields2 = node2.named_children();
 
-    // If the number of named fields is different, then the nodes are not equivalent.
-    // This also covers the case of mistached optional and "multiple" fields.
-    if named_fields1.len() != named_fields2.len() {
-        return false;
-    }
-
-    // This is effectively a leaf node. If two leaf nodes have different sources (see above),
-    // then they are not equivalent.
+    // If there are no children, this is effectively a leaf node. If two leaf
+    // nodes have different sources (see above), then they are not equivalent.
     // If they do not have the same sources, we consider them different.
-    if named_fields1.len() == 0 {
-        return false;
-    }
+    let mut is_empty = true;
 
-    // And now recursing on the named fields.
-    for (child1, child2) in named_fields1.zip(named_fields2) {
-        if !are_equivalent(source1, &child1, source2, &child2) {
-            return false;
-        }
-    }
+    // Recurse through the named fields to find the first mismatch.
+    // Differences in length are caught by the use of `EitherOrBoth`.
+    // This also covers the case of mistached optional and "multiple" fields.
+    let are_equivalent = named_fields1
+        .zip_longest(named_fields2)
+        .all(|zipped| match zipped {
+            EitherOrBoth::Both(child1, child2) => {
+                is_empty = false;
+                are_equivalent(&child1, &child2)
+            }
+            EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
+        });
 
-    true
+    are_equivalent && !is_empty
 }

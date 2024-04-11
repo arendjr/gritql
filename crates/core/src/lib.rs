@@ -1,4 +1,6 @@
 #![deny(clippy::wildcard_enum_match_arm)]
+pub mod analysis;
+pub mod api;
 pub mod binding;
 pub mod compact_api;
 pub mod context;
@@ -11,6 +13,8 @@ mod intervals;
 mod orphan;
 pub mod parse;
 pub mod pattern;
+pub mod pattern_compiler;
+pub mod problem;
 mod resolve;
 mod smart_insert;
 mod split_snippet;

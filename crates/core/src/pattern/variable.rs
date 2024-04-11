@@ -1,11 +1,13 @@
 use super::{
-    compiler::{ABSOLUTE_PATH_INDEX, DEFAULT_FILE_NAME, FILENAME_INDEX},
+    constants::{ABSOLUTE_PATH_INDEX, DEFAULT_FILE_NAME, FILENAME_INDEX, GLOBAL_VARS_SCOPE_INDEX},
     container::{PatternOrResolved, PatternOrResolvedMut},
     patterns::{Matcher, Name},
     resolved_pattern::ResolvedPattern,
     State,
 };
-use crate::{binding::Binding, context::Context};
+use crate::{
+    binding::Binding, context::Context, pattern_compiler::compiler::NodeCompilationContext,
+};
 use anyhow::{bail, Result};
 use core::fmt::Debug;
 use im::vector;
@@ -25,13 +27,7 @@ pub struct VariableSourceLocations {
     pub(crate) file: String,
     pub(crate) locations: BTreeSet<Range>,
 }
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
-};
-use tree_sitter::Node;
-
-pub(crate) const GLOBAL_VARS_SCOPE_INDEX: usize = 0;
+use std::{borrow::Cow, collections::BTreeSet};
 
 struct VariableMirror<B: Binding> {
     scope: usize,
@@ -77,36 +73,8 @@ impl Variable {
         Self::new(GLOBAL_VARS_SCOPE_INDEX, FILENAME_INDEX)
     }
 
-    pub(crate) fn from_node(
-        node: &Node,
-        file: &str,
-        src: &str,
-        vars: &mut BTreeMap<String, usize>,
-        global_vars: &mut BTreeMap<String, usize>,
-        vars_array: &mut [Vec<VariableSourceLocations>],
-        scope_index: usize,
-    ) -> Result<Self> {
-        let name = node.utf8_text(src.as_bytes())?.trim().to_string();
-        let range = node.range().into();
-        register_variable(
-            &name,
-            file,
-            range,
-            vars,
-            global_vars,
-            vars_array,
-            scope_index,
-        )
-    }
-
-    pub(crate) fn from_name(
-        name: &str,
-        vars: &mut BTreeMap<String, usize>,
-        vars_array: &mut [Vec<VariableSourceLocations>],
-        scope_index: usize,
-        global_vars: &mut BTreeMap<String, usize>,
-    ) -> Result<Self> {
-        register_variable_optional_range(name, None, vars, global_vars, vars_array, scope_index)
+    pub(crate) fn from_name(name: &str, context: &mut NodeCompilationContext) -> Result<Self> {
+        register_variable_optional_range(name, None, context)
     }
 
     pub(crate) fn text<'a, B: Binding>(&self, state: &State<'a, B>) -> Result<Cow<'a, str>> {
@@ -201,24 +169,12 @@ impl Variable {
 
 pub(crate) fn get_variables(
     params: &[(String, Range)],
-    file: &str,
-    vars_array: &mut [Vec<VariableSourceLocations>],
-    scope_index: usize,
-    local_vars: &mut BTreeMap<String, usize>, // FIXME how is this different than the return value?
-    global_vars: &mut BTreeMap<String, usize>,
+    context: &mut NodeCompilationContext,
 ) -> Result<Vec<(String, Variable)>> {
     params
         .iter()
         .map(|(name, range)| {
-            let index = register_variable(
-                name,
-                file,
-                *range,
-                local_vars,
-                global_vars,
-                vars_array,
-                scope_index,
-            )?;
+            let index = register_variable(name, *range, context)?;
             Ok((name.to_owned(), index))
         })
         .collect()
@@ -226,23 +182,16 @@ pub(crate) fn get_variables(
 
 pub(crate) fn register_variable(
     name: &str,
-    file: &str,
     range: Range,
-    vars: &mut BTreeMap<String, usize>,
-    global_vars: &mut BTreeMap<String, usize>,
-    vars_array: &mut [Vec<VariableSourceLocations>],
-    scope_index: usize,
+    context: &mut NodeCompilationContext,
 ) -> Result<Variable> {
     register_variable_optional_range(
         name,
         Some(FileLocation {
             range,
-            file_name: file,
+            file_name: context.compilation.file,
         }),
-        vars,
-        global_vars,
-        vars_array,
-        scope_index,
+        context,
     )
 }
 
@@ -254,16 +203,21 @@ struct FileLocation<'a> {
 fn register_variable_optional_range(
     name: &str,
     location: Option<FileLocation>,
-    vars: &mut BTreeMap<String, usize>,
-    global_vars: &mut BTreeMap<String, usize>,
-    vars_array: &mut [Vec<VariableSourceLocations>],
-    scope_index: usize,
+    context: &mut NodeCompilationContext,
 ) -> Result<Variable> {
+    let NodeCompilationContext {
+        vars,
+        vars_array,
+        global_vars,
+        scope_index,
+        ..
+    } = context;
+
     if let Some(i) = vars.get(name) {
         if let Some(FileLocation { range, .. }) = location {
-            vars_array[scope_index][*i].locations.insert(range);
+            vars_array[*scope_index][*i].locations.insert(range);
         }
-        return Ok(Variable::new(scope_index, *i));
+        return Ok(Variable::new(*scope_index, *i));
     }
 
     if let Some(i) = global_vars.get(name) {
@@ -279,7 +233,7 @@ fn register_variable_optional_range(
     let (name_map, scope_index) = if name.starts_with("$GLOBAL_") || name.starts_with("^GLOBAL_") {
         (global_vars, GLOBAL_VARS_SCOPE_INDEX)
     } else {
-        (vars, scope_index)
+        (vars, *scope_index)
     };
     let scope = &mut vars_array[scope_index];
     let index = scope.len();

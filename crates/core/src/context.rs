@@ -7,8 +7,8 @@ use crate::{
         predicate_definition::PredicateDefinition,
         resolved_pattern::ResolvedPattern,
         state::State,
-        FileOwners,
     },
+    problem::FileOwners,
 };
 use anyhow::Result;
 use marzano_language::target_language::TargetLanguage;

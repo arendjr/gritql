@@ -2,7 +2,7 @@ use colored::Colorize;
 use dashmap::{DashMap, ReadOnlyView};
 use log::{debug, info};
 
-use marzano_core::pattern::api::MatchResult;
+use marzano_core::api::MatchResult;
 use marzano_gritmodule::config::{GritPatternSample, GritPatternTestInfo};
 use marzano_gritmodule::formatting::format_rich_files;
 use marzano_gritmodule::markdown::replace_sample_in_md_file;
@@ -78,7 +78,7 @@ pub async fn get_marzano_pattern_test_results(
                                         "Sample output: {:?}, {:?}",
                                         result.message, result.expected_output
                                     );
-                                    actual_sample.output = output.clone()
+                                    actual_sample.output = Some(output.clone())
                                 }
                                 None => (),
                             }
@@ -261,12 +261,9 @@ pub(crate) async fn run_patterns_test(
 
     if !arg.exclude.is_empty() {
         for exclusion in &arg.exclude {
-            let regex = regex::Regex::new(exclusion)?;
             patterns = patterns
                 .into_iter()
-                .filter(|p| {
-                    !regex.is_match(&p.local_name) && p.tags().iter().all(|t| !regex.is_match(t))
-                })
+                .filter(|p| &p.local_name != exclusion && p.tags().iter().all(|t| t != exclusion))
                 .collect::<Vec<_>>()
         }
     }

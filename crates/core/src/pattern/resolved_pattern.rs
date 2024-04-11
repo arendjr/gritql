@@ -7,15 +7,17 @@ use super::{
     paths::absolutize,
     patterns::Pattern,
     state::{FilePtr, FileRegistry, State},
-    Effect, EffectKind,
 };
 use crate::{
     binding::{Binding, Constant},
     context::Context,
     pattern::{container::PatternOrResolved, patterns::Name},
+    problem::{Effect, EffectKind},
 };
 use anyhow::{anyhow, bail, Result};
+use grit_util::CodeRange;
 use im::{vector, Vector};
+use itertools::Itertools;
 use marzano_language::{language::FieldId, target_language::TargetLanguage};
 use marzano_util::{
     analysis_logs::AnalysisLogs, node_with_source::NodeWithSource, position::Range,
@@ -25,7 +27,6 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
 };
-use tree_sitter::Node;
 
 /**
  * This file contains data structures for everything resolved.
@@ -124,7 +125,7 @@ impl<'a, B: Binding> JoinFn<'a, B> {
         distributed_indent: Option<usize>,
         logs: &mut AnalysisLogs,
     ) -> Result<Cow<str>> {
-        Ok(self
+        let res = self
             .list
             .iter()
             .map(|pattern| {
@@ -138,8 +139,12 @@ impl<'a, B: Binding> JoinFn<'a, B> {
                 )
             })
             .collect::<Result<Vec<_>>>()?
-            .join(&self.separator)
-            .into())
+            .join(&self.separator);
+        if let Some(padding) = distributed_indent {
+            Ok(pad_text(&res, padding).into())
+        } else {
+            Ok(res.into())
+        }
     }
 
     fn text(&self, state: &FileRegistry<'a>) -> Result<Cow<'a, str>> {
@@ -193,63 +198,21 @@ pub enum ResolvedPattern<'a, B: Binding> {
     Constant(Constant),
 }
 
-// I believe default hash is expensive here because of
-// the string reference, we should probably store
-// files in an array, and use index references instead
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct CodeRange {
-    pub start: u32,
-    pub end: u32,
-    pub address: usize,
-}
-
-impl CodeRange {
-    pub fn new(start: u32, end: u32, src: &str) -> CodeRange {
-        let raw_ptr = src as *const str;
-        let thin_ptr = raw_ptr as *const u8;
-        let address = thin_ptr as usize;
-        CodeRange {
-            start,
-            end,
-            address,
-        }
+fn pad_text(text: &str, padding: usize) -> String {
+    if text.trim().is_empty() {
+        text.to_owned()
+    } else {
+        let mut res = if text.starts_with('\n') {
+            "\n".to_owned()
+        } else {
+            String::new()
+        };
+        res.push_str(&text.lines().join(&format!("\n{}", " ".repeat(padding))));
+        if text.ends_with('\n') {
+            res.push('\n')
+        };
+        res
     }
-
-    pub fn from_node(src: &str, node: &Node) -> CodeRange {
-        let raw_ptr = src as *const str;
-        let thin_ptr = raw_ptr as *const u8;
-        let address = thin_ptr as usize;
-        CodeRange {
-            start: node.start_byte(),
-            end: node.end_byte(),
-            address,
-        }
-    }
-
-    pub fn from_range(src: &str, range: Range) -> CodeRange {
-        let raw_ptr = src as *const str;
-        let thin_ptr = raw_ptr as *const u8;
-        let address = thin_ptr as usize;
-        CodeRange {
-            start: range.start_byte,
-            end: range.end_byte,
-            address,
-        }
-    }
-
-    pub fn equal_address(&self, other: &str) -> bool {
-        let raw_ptr = other as *const str;
-        let thin_ptr = raw_ptr as *const u8;
-        let index = thin_ptr as usize;
-        self.address == index
-    }
-}
-
-pub fn _print_address(string: &str) {
-    let raw_ptr = string as *const str;
-    let thin_ptr = raw_ptr as *const u8;
-    let address = thin_ptr as usize;
-    println!("ADDRESS: {:?}", address);
 }
 
 impl<'a, B: Binding> ResolvedSnippet<'a, B> {
@@ -288,7 +251,13 @@ impl<'a, B: Binding> ResolvedSnippet<'a, B> {
         logs: &mut AnalysisLogs,
     ) -> Result<Cow<str>> {
         let res = match self {
-            ResolvedSnippet::Text(text) => Ok(text.clone()),
+            ResolvedSnippet::Text(text) => {
+                if let Some(indent) = distributed_indent {
+                    Ok(pad_text(text, indent).into())
+                } else {
+                    Ok(text.clone())
+                }
+            }
             ResolvedSnippet::Binding(binding) => {
                 // we are now taking the unmodified source code, and replacing the binding with the snippet
                 // we will want to apply effects next
@@ -424,12 +393,12 @@ impl<'a, B: Binding> ResolvedPattern<'a, B> {
         Self::from_binding(Binding::from_node(node))
     }
 
-    pub(crate) fn from_list(src: &'a str, node: Node<'a>, field_id: FieldId) -> Self {
-        Self::from_binding(Binding::List(src, node, field_id))
+    pub(crate) fn from_list(node: NodeWithSource<'a>, field_id: FieldId) -> Self {
+        Self::from_binding(Binding::List(node, field_id))
     }
 
-    pub(crate) fn empty_field(src: &'a str, node: Node<'a>, field_id: FieldId) -> Self {
-        Self::from_binding(Binding::Empty(src, node, field_id))
+    pub(crate) fn empty_field(node: NodeWithSource<'a>, field_id: FieldId) -> Self {
+        Self::from_binding(Binding::Empty(node, field_id))
     }
 
     pub(crate) fn from_path(path: &'a Path) -> Self {

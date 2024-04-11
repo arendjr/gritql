@@ -1,4 +1,4 @@
-use marzano_core::pattern::api::EnforcementLevel;
+use marzano_core::api::EnforcementLevel;
 use marzano_language::target_language::PatternLanguage;
 use marzano_util::position::{Position, Range};
 use serde::{Deserialize, Serialize};
@@ -314,7 +314,7 @@ pub fn pattern_config_to_model(
 pub struct GritPatternSample {
     pub name: Option<String>,
     pub input: String,
-    pub output: String,
+    pub output: Option<String>,
     pub input_range: Option<Range>,
     pub output_range: Option<Range>,
 }

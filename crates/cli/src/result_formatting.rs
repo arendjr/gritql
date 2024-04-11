@@ -3,12 +3,11 @@ use colored::Colorize;
 use console::style;
 use core::fmt;
 use log::info;
-use marzano_core::pattern::api::FileMatchResult;
-use marzano_core::pattern::api::{
-    AllDone, AnalysisLog, CreateFile, DoneFile, InputFile, Match, MatchResult, PatternInfo,
-    RemoveFile, Rewrite,
+use marzano_core::api::{
+    AllDone, AnalysisLog, CreateFile, DoneFile, FileMatchResult, InputFile, Match, MatchResult,
+    PatternInfo, RemoveFile, Rewrite,
 };
-use marzano_core::pattern::compiler::DEFAULT_FILE_NAME;
+use marzano_core::pattern::constants::DEFAULT_FILE_NAME;
 use marzano_messenger::output_mode::OutputMode;
 use std::fmt::Display;
 use std::fs::read_to_string;
