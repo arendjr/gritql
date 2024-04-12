@@ -1,6 +1,6 @@
 use crate::{
     api::{is_match, AnalysisLog, ByteRange, DoneFile, MatchResult},
-    binding::Binding,
+    binding::{Binding, MarzanoBinding},
     pattern::{
         built_in_functions::BuiltIns,
         constants::{GLOBAL_VARS_SCOPE_INDEX, NEW_FILES_INDEX},
@@ -487,7 +487,7 @@ impl Problem {
             .map(|scope| {
                 vector![scope
                     .iter()
-                    .map(|s| Box::new(VariableContent::new(s.name.clone())))
+                    .map(|s| Box::new(VariableContent::<MarzanoBinding>::new(s.name.clone())))
                     .collect()]
             })
             .collect();

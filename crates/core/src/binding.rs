@@ -67,6 +67,14 @@ impl PartialEq for Constant {
 }
 
 pub trait Binding: Clone + std::fmt::Debug + PartialEq {
+    type Node: AstNode;
+
+    /// Creates a new binding from the given constant.
+    fn from_constant(node: &Constant) -> Self;
+
+    /// Creates a new binding from the given node.
+    fn from_node(node: Self::Node) -> Self;
+
     fn get_sexp(&self) -> Option<String>;
 
     /// The range where the binding is found in the source text.
@@ -91,7 +99,7 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     fn as_filename(&self) -> Option<&Path>;
 
     /// Returns the node of this binding, if and only if it is a node binding.
-    fn as_node(&self) -> Option<impl AstNode>;
+    fn as_node(&self) -> Option<Self::Node>;
 
     /// Returns whether the binding is empty.
     fn is_empty(&self) -> bool;
@@ -108,9 +116,11 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     /// Returns an iterator over the items in a list.
     ///
     /// Returns `None` if the binding is not bound to a list.
-    fn list_items(&self) -> Option<impl Iterator<Item = impl AstNode> + Clone>;
+    fn list_items(&self) -> Option<impl Iterator<Item = Self::Node> + Clone>;
 
     fn is_suppressed(&self, lang: &impl Language, current_name: Option<&str>) -> bool;
+
+    fn is_truthy(&self) -> bool;
 
     /// Logs an error about this binding if the given range is empty.
     fn log_empty_field_rewrite_error(
@@ -129,7 +139,7 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     ) -> Option<String>;
 
     /// Returns the parent node of the binding.
-    fn parent_node(&self) -> Option<impl AstNode>;
+    fn parent_node(&self) -> Option<Self::Node>;
 
     /// Returns the only node bound by this binding.
     ///
@@ -137,7 +147,7 @@ pub trait Binding: Clone + std::fmt::Debug + PartialEq {
     ///
     /// Returns `None` if the binding has no associated node, or if there is
     /// more than one associated node.
-    fn singleton(&self) -> Option<impl AstNode>;
+    fn singleton(&self) -> Option<Self::Node>;
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +166,16 @@ pub(crate) enum MarzanoBinding<'a> {
 }
 
 impl<'a> Binding for MarzanoBinding<'a> {
+    type Node = NodeWithSource<'a>;
+
+    fn from_constant(constant: &Constant) -> Self {
+        Self::ConstantRef(constant)
+    }
+
+    fn from_node(node: NodeWithSource<'a>) -> Self {
+        Self::Node(node)
+    }
+
     fn get_sexp(&self) -> Option<String> {
         match self {
             Self::Node(node) => Some(node.node.to_sexp().to_string()),
@@ -314,7 +334,7 @@ impl<'a> Binding for MarzanoBinding<'a> {
         }
     }
 
-    fn as_node(&self) -> Option<impl AstNode> {
+    fn as_node(&self) -> Option<NodeWithSource<'a>> {
         if let Self::Node(node) = self {
             Some(node.clone())
         } else {
@@ -450,6 +470,21 @@ impl<'a> Binding for MarzanoBinding<'a> {
         }
 
         false
+    }
+
+    fn is_truthy(&self) -> bool {
+        match self {
+            Self::Empty(..) => false,
+            Self::List(node, field_id) => {
+                let child_count = node.named_children_by_field_id(*field_id).count();
+                child_count > 0
+            }
+            Self::Node(..) => true,
+            // This refers to a slice of the source code, not a Grit string literal, so it is truthy
+            Self::String(..) => true,
+            Self::FileName(_) => true,
+            Self::ConstantRef(c) => c.is_truthy(),
+        }
     }
 
     fn parent_node(&self) -> Option<NodeWithSource<'a>> {
@@ -722,14 +757,6 @@ pub(crate) fn linearize_binding<'a, B: Binding>(
 }
 
 impl<'a> MarzanoBinding<'a> {
-    pub(crate) fn from_constant(constant: &'a Constant) -> Self {
-        Self::ConstantRef(constant)
-    }
-
-    pub(crate) fn from_node(node: NodeWithSource<'a>) -> Self {
-        Self::Node(node)
-    }
-
     pub(crate) fn from_path(path: &'a Path) -> Self {
         Self::FileName(path)
     }
@@ -787,20 +814,5 @@ impl<'a> MarzanoBinding<'a> {
             Self::ConstantRef(c) => Ok(Cow::Owned(c.to_string())),
         };
         res
-    }
-
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Self::Empty(..) => false,
-            Self::List(node, field_id) => {
-                let child_count = node.named_children_by_field_id(*field_id).count();
-                child_count > 0
-            }
-            Self::Node(..) => true,
-            // This refers to a slice of the source code, not a Grit string literal, so it is truthy
-            Self::String(..) => true,
-            Self::FileName(_) => true,
-            Self::ConstantRef(c) => c.is_truthy(),
-        }
     }
 }

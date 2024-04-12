@@ -31,12 +31,12 @@ pub struct CallFunction {
 }
 
 pub(crate) trait GritCall {
-    fn call<'a, B: Binding>(
+    fn call<'a, C: Context>(
         &'a self,
-        state: &mut State<'a, B>,
+        state: &mut State<'a, C::B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a, B>>;
+    ) -> Result<ResolvedPattern<'a, C::B>>;
 }
 
 impl CallFunction {
@@ -46,12 +46,12 @@ impl CallFunction {
 }
 
 impl GritCall for CallFunction {
-    fn call<'a, B: Binding>(
+    fn call<'a, C: Context>(
         &'a self,
-        state: &mut State<'a, B>,
+        state: &mut State<'a, C::B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a, B>> {
+    ) -> Result<ResolvedPattern<'a, C::B>> {
         let function_definition = &context.function_definitions()[self.index];
 
         match function_definition
@@ -83,12 +83,12 @@ impl CallForeignFunction {
 }
 
 impl GritCall for CallForeignFunction {
-    fn call<'a, B: Binding>(
+    fn call<'a, C: Context>(
         &'a self,
-        state: &mut State<'a, B>,
+        state: &mut State<'a, C::B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a, B>> {
+    ) -> Result<ResolvedPattern<'a, C::B>> {
         let function_definition = &context.foreign_function_definitions()[self.index];
 
         match function_definition

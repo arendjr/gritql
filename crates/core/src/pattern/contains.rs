@@ -1,13 +1,13 @@
 use super::{
     patterns::{Matcher, Name, Pattern},
     resolved_pattern::{LazyBuiltIn, ResolvedPattern, ResolvedSnippet},
-    Node, State,
+    State,
 };
 use crate::{binding::Binding, context::Context, resolve};
 use anyhow::Result;
 use core::fmt::Debug;
 use im::vector;
-use marzano_util::{analysis_logs::AnalysisLogs, node_with_source::NodeWithSource};
+use marzano_util::analysis_logs::AnalysisLogs;
 
 #[derive(Debug, Clone)]
 pub struct Contains {
@@ -29,8 +29,7 @@ impl Name for Contains {
 
 fn execute_until<'a, B: Binding>(
     init_state: &mut State<'a, B>,
-    node: &Node<'a>,
-    src: &'a str,
+    node: &B::Node,
     context: &'a impl Context,
     logs: &mut AnalysisLogs,
     the_contained: &'a Pattern,
@@ -42,7 +41,7 @@ fn execute_until<'a, B: Binding>(
     let mut still_computing = true;
     while still_computing {
         let node = cursor.node();
-        let node_lhs = ResolvedPattern::from_node(NodeWithSource::new(node, src));
+        let node_lhs = ResolvedPattern::from_node(node);
 
         let state = cur_state.clone();
         if the_contained.execute(&node_lhs, &mut cur_state, context, logs)? {
@@ -96,8 +95,7 @@ impl Matcher for Contains {
                 if let Some(node) = binding.as_node() {
                     execute_until(
                         init_state,
-                        &node.node,
-                        node.source,
+                        &node,
                         context,
                         logs,
                         &self.contains,

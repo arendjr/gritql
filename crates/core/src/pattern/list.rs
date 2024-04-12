@@ -46,7 +46,7 @@ impl Matcher for List {
                     return Ok(false);
                 };
 
-                let children: Vec<Cow<ResolvedPattern>> = list_items
+                let children: Vec<Cow<ResolvedPattern<B>>> = list_items
                     .map(ResolvedPattern::from_node)
                     .map(Cow::Owned)
                     .collect();
@@ -54,7 +54,7 @@ impl Matcher for List {
                 execute_assoc(&self.patterns, &children, state, context, logs)
             }
             ResolvedPattern::List(patterns) => {
-                let patterns: Vec<Cow<ResolvedPattern<'_>>> =
+                let patterns: Vec<Cow<ResolvedPattern<'_, B>>> =
                     patterns.into_iter().map(Cow::Borrowed).collect();
                 execute_assoc(&self.patterns, &patterns, state, context, logs)
             }

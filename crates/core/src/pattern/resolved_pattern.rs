@@ -386,11 +386,11 @@ impl<'a, B: Binding> ResolvedPattern<'a, B> {
     }
 
     pub fn from_constant(constant: &'a Constant) -> Self {
-        Self::from_binding(Binding::from_constant(constant))
+        Self::from_binding(B::from_constant(constant))
     }
 
-    pub(crate) fn from_node(node: NodeWithSource<'a>) -> Self {
-        Self::from_binding(Binding::from_node(node))
+    pub(crate) fn from_node(node: B::Node) -> Self {
+        Self::from_binding(B::from_node(node))
     }
 
     pub(crate) fn from_list(node: NodeWithSource<'a>, field_id: FieldId) -> Self {
@@ -928,7 +928,7 @@ impl<'a, B: Binding> ResolvedPattern<'a, B> {
 
     pub(crate) fn is_truthy(&self, state: &mut State<'a, B>) -> Result<bool> {
         let truthiness = match self {
-            Self::Binding(bindings) => bindings.last().map_or(false, Binding::is_truthy),
+            Self::Binding(bindings) => bindings.last().map_or(false, B::is_truthy),
             Self::List(elements) => !elements.is_empty(),
             Self::Map(map) => !map.is_empty(),
             Self::Constant(c) => c.is_truthy(),

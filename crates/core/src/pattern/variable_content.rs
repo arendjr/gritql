@@ -1,9 +1,7 @@
+use super::{resolved_pattern::ResolvedPattern, state::State, variable::Variable};
+use crate::{binding::Binding, pattern::patterns::Pattern};
 use anyhow::{anyhow, Result};
 use std::borrow::Cow;
-
-use crate::{binding::Binding, pattern::patterns::Pattern};
-
-use super::{resolved_pattern::ResolvedPattern, state::State, variable::Variable};
 
 #[derive(Debug, Clone)]
 pub struct VariableContent<'a, B: Binding> {

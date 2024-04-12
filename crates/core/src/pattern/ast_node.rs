@@ -47,7 +47,6 @@ impl Matcher for ASTNode {
             return self.execute(&ResolvedPattern::from_node(node), init_state, context, logs);
         }
 
-        let NodeWithSource { node, source } = node;
         if node.kind_id() != self.sort {
             return Ok(false);
         }
@@ -55,7 +54,7 @@ impl Matcher for ASTNode {
             return Ok(true);
         }
         if context.language().is_comment(self.sort) {
-            let content = context.language().comment_text(&node, source);
+            let content = context.language().comment_text(node, source);
             let content = resolve!(content);
 
             return self.args[0].2.execute(
@@ -71,17 +70,14 @@ impl Matcher for ASTNode {
 
             let res = if *is_list {
                 pattern.execute(
-                    &ResolvedPattern::from_list(
-                        NodeWithSource::new(node.clone(), source),
-                        *field_id,
-                    ),
+                    &ResolvedPattern::from_list(node.clone(), *field_id),
                     &mut cur_state,
                     context,
                     logs,
                 )
             } else if let Some(child) = node.child_by_field_id(*field_id) {
                 pattern.execute(
-                    &ResolvedPattern::from_node(NodeWithSource::new(child, source)),
+                    &ResolvedPattern::from_node(child),
                     &mut cur_state,
                     context,
                     logs,

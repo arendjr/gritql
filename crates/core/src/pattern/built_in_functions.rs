@@ -56,12 +56,12 @@ impl CallBuiltIn {
 }
 
 impl GritCall for CallBuiltIn {
-    fn call<'a, B: Binding>(
+    fn call<'a, C: Context>(
         &'a self,
-        state: &mut State<'a, B>,
+        state: &mut State<'a, C::B>,
         context: &'a impl Context,
         logs: &mut AnalysisLogs,
-    ) -> Result<ResolvedPattern<'a, B>> {
+    ) -> Result<ResolvedPattern<'a, C::B>> {
         context.call_built_in(self, context, state, logs)
     }
 }
